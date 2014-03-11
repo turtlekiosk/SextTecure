@@ -26,12 +26,16 @@ import org.thoughtcrime.securesms.mms.MmsRadio;
 import org.thoughtcrime.securesms.mms.MmsRadioException;
 import org.thoughtcrime.securesms.mms.MmsSendHelper;
 import org.thoughtcrime.securesms.mms.MmsSendResult;
+import org.thoughtcrime.securesms.mms.PartAuthority;
 import org.thoughtcrime.securesms.mms.TextTransport;
 import org.thoughtcrime.securesms.protocol.WirePrefix;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.recipients.RecipientFactory;
 import org.thoughtcrime.securesms.recipients.RecipientFormattingException;
+import org.thoughtcrime.securesms.util.BitmapDecodingException;
+import org.thoughtcrime.securesms.util.BitmapUtil;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
+import org.thoughtcrime.securesms.util.Util;
 import org.whispersystems.textsecure.crypto.MasterSecret;
 import org.whispersystems.textsecure.crypto.SessionCipher;
 import org.whispersystems.textsecure.crypto.protocol.CiphertextMessage;
@@ -39,6 +43,7 @@ import org.whispersystems.textsecure.storage.RecipientDevice;
 import org.whispersystems.textsecure.util.Hex;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.Arrays;
 
 import ws.com.google.android.mms.ContentType;
@@ -51,6 +56,8 @@ import ws.com.google.android.mms.pdu.SendConf;
 import ws.com.google.android.mms.pdu.SendReq;
 
 public class MmsTransport {
+
+  private static final int MAX_MESSAGE_SIZE = 1048576;
 
   private final Context      context;
   private final MasterSecret masterSecret;
@@ -114,6 +121,8 @@ public class MmsTransport {
     String  number         = ((TelephonyManager)context.getSystemService(Context.TELEPHONY_SERVICE)).getLine1Number();
     boolean upgradedSecure = false;
 
+    message = getMessageWithScaledParts(message);
+
     if (MmsDatabase.Types.isSecureType(message.getDatabaseMessageBox())) {
       message        = getEncryptedMessage(message);
       upgradedSecure = true;
@@ -175,6 +184,42 @@ public class MmsTransport {
       Log.w("MmsTransport", e);
       throw new AssertionError(e);
     }
+  }
+
+  private SendReq getMessageWithScaledParts(SendReq message) throws UndeliverableMessageException {
+    PduBody pdu       = message.getBody();
+    PduBody scaledPdu = new PduBody();
+
+    for (int i=0;i<pdu.getPartsNum();i++) {
+      try {
+        PduPart part        = pdu.getPart(i);
+        String  contentType = new String(part.getContentType());
+
+        if (ContentType.isImageType(contentType)) {
+          InputStream measureStream = PartAuthority.getPartStream(context, masterSecret, part.getDataUri());
+          InputStream dataStream    = PartAuthority.getPartStream(context, masterSecret, part.getDataUri());
+          byte[]      data          = BitmapUtil.createScaledBytes(measureStream, dataStream, 640, 480, (300 * 1024) - 5000);
+          part.setData(data);
+          scaledPdu.addPart(part);
+        } else if (ContentType.isVideoType(contentType)) {
+          if (part.getDataSize() > MAX_MESSAGE_SIZE) throw new UndeliverableMessageException("Video part too large!");
+          else                                       scaledPdu.addPart(part);
+        } else if (ContentType.isAudioType(contentType)) {
+          if (part.getDataSize() > MAX_MESSAGE_SIZE) throw new UndeliverableMessageException("Audio part too large!");
+          else                                       scaledPdu.addPart(part);
+        } else {
+          byte[] data = Util.readFully(PartAuthority.getPartStream(context, masterSecret, part.getDataUri()));
+          part.setData(data);
+          scaledPdu.addPart(part);
+        }
+      } catch (IOException e) {
+        Log.w("MmsTransport", e);
+      } catch (BitmapDecodingException e) {
+        Log.w("MmsTransport", e);
+      }
+    }
+
+    return new SendReq(message.getPduHeaders(), scaledPdu);
   }
 
   private boolean isInconsistentResponse(SendReq message, SendConf response) {

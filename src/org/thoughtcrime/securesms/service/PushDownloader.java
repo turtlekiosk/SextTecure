@@ -6,9 +6,7 @@ import android.content.Intent;
 import android.util.Log;
 import android.util.Pair;
 
-import org.thoughtcrime.securesms.Release;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
-import org.thoughtcrime.securesms.database.EncryptingPartDatabase;
 import org.thoughtcrime.securesms.database.PartDatabase;
 import org.thoughtcrime.securesms.push.PushServiceSocketFactory;
 import org.thoughtcrime.securesms.util.Util;
@@ -41,19 +39,19 @@ public class PushDownloader {
       return;
 
     long         messageId = intent.getLongExtra("message_id", -1);
-    PartDatabase database  = DatabaseFactory.getEncryptingPartDatabase(context, masterSecret);
+    PartDatabase database  = DatabaseFactory.getPartDatabase(context);
 
     Log.w("PushDownloader", "Downloading push parts for: " + messageId);
 
     if (messageId != -1) {
-      List<Pair<Long, PduPart>> parts = database.getParts(messageId, false);
+      List<Pair<Long, PduPart>> parts = database.getParts(masterSecret, messageId, false);
 
       for (Pair<Long, PduPart> partPair : parts) {
         retrievePart(masterSecret, partPair.second, messageId, partPair.first);
         Log.w("PushDownloader", "Got part: " + partPair.first);
       }
     } else {
-      List<Pair<Long, Pair<Long, PduPart>>> parts = database.getPushPendingParts();
+      List<Pair<Long, Pair<Long, PduPart>>> parts = database.getPushPendingParts(masterSecret);
 
       for (Pair<Long, Pair<Long, PduPart>> partPair : parts) {
         retrievePart(masterSecret, partPair.second.second, partPair.first, partPair.second.first);
@@ -63,8 +61,8 @@ public class PushDownloader {
   }
 
   private void retrievePart(MasterSecret masterSecret, PduPart part, long messageId, long partId) {
-    EncryptingPartDatabase database       = DatabaseFactory.getEncryptingPartDatabase(context, masterSecret);
-    File                   attachmentFile = null;
+    PartDatabase database       = DatabaseFactory.getPartDatabase(context);
+    File         attachmentFile = null;
 
     try {
       MasterCipher masterCipher    = new MasterCipher(masterSecret);
@@ -79,7 +77,7 @@ public class PushDownloader {
       attachmentFile              = downloadAttachment(relay, contentLocation);
       InputStream attachmentInput = new AttachmentCipherInputStream(attachmentFile, key);
 
-      database.updateDownloadedPart(messageId, partId, part, attachmentInput);
+      database.updateDownloadedPart(masterSecret, messageId, partId, part, attachmentInput);
     } catch (NotFoundException e) {
       Log.w("PushDownloader", e);
       try {

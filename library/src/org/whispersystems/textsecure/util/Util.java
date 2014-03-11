@@ -136,16 +136,20 @@ public class Util {
   }
 
 
-  public static void copy(InputStream in, OutputStream out) throws IOException {
-    byte[] buffer = new byte[4096];
+  public static long copy(InputStream in, OutputStream out) throws IOException {
+    byte[] buffer = new byte[102400];
+    int   copied  = 0;
     int read;
 
     while ((read = in.read(buffer)) != -1) {
       out.write(buffer, 0, read);
+      copied += read;
     }
 
     in.close();
     out.close();
+
+    return copied;
   }
 
   public static String join(Collection<String> list, String delimiter) {
@@ -192,6 +196,13 @@ public class Util {
     }
 
     return null;
+  }
+
+  public static byte[] getKey(int lengthBytes) {
+    byte[] key = new byte[lengthBytes];
+    getSecureRandom().nextBytes(key);
+
+    return key;
   }
 
   public static SecureRandom getSecureRandom() {

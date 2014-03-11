@@ -22,23 +22,30 @@ import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
+import android.graphics.Bitmap;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.Pair;
 
-import org.thoughtcrime.securesms.providers.PartProvider;
+import org.thoughtcrime.securesms.crypto.DecryptingPartInputStream;
+import org.thoughtcrime.securesms.crypto.EncryptingPartOutputStream;
+import org.thoughtcrime.securesms.mms.PartAuthority;
+import org.thoughtcrime.securesms.util.BitmapDecodingException;
+import org.thoughtcrime.securesms.util.BitmapUtil;
 import org.thoughtcrime.securesms.util.Util;
+import org.whispersystems.textsecure.crypto.MasterSecret;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 import ws.com.google.android.mms.ContentType;
 import ws.com.google.android.mms.MmsException;
@@ -63,22 +70,169 @@ public class PartDatabase extends Database {
   private static final String ENCRYPTED               = "encrypted";
   private static final String DATA                    = "_data";
   private static final String PENDING_PUSH_ATTACHMENT = "pending_push";
+  private static final String THUMBNAIL               = "_thumbnail";
+  private static final String SIZE                    = "data_size";
 
   public static final String CREATE_TABLE = "CREATE TABLE " + TABLE_NAME + " (" + ID + " INTEGER PRIMARY KEY, "              +
-    MMS_ID + " INTEGER, " + SEQUENCE + " INTEGER DEFAULT 0, "                       +
-    CONTENT_TYPE + " TEXT, " + NAME + " TEXT, " + CHARSET + " INTEGER, "            +
-    CONTENT_DISPOSITION + " TEXT, " + FILENAME + " TEXT, " + CONTENT_ID + " TEXT, " +
-    CONTENT_LOCATION + " TEXT, " + CONTENT_TYPE_START + " INTEGER, "                +
-    CONTENT_TYPE_TYPE + " TEXT, " + ENCRYPTED + " INTEGER, " +
-    PENDING_PUSH_ATTACHMENT + " INTEGER, "+ DATA + " TEXT);";
+    MMS_ID + " INTEGER, " + SEQUENCE + " INTEGER DEFAULT 0, "                        +
+    CONTENT_TYPE + " TEXT, " + NAME + " TEXT, " + CHARSET + " INTEGER, "             +
+    CONTENT_DISPOSITION + " TEXT, " + FILENAME + " TEXT, " + CONTENT_ID + " TEXT, "  +
+    CONTENT_LOCATION + " TEXT, " + CONTENT_TYPE_START + " INTEGER, "                 +
+    CONTENT_TYPE_TYPE + " TEXT, " + ENCRYPTED + " INTEGER, "                         +
+    PENDING_PUSH_ATTACHMENT + " INTEGER, "+ DATA + " TEXT, " + THUMBNAIL + " TEXT, " +
+    SIZE + " INTEGER);";
 
   public static final String[] CREATE_INDEXS = {
     "CREATE INDEX IF NOT EXISTS part_mms_id_index ON " + TABLE_NAME + " (" + MMS_ID + ");",
     "CREATE INDEX IF NOT EXISTS pending_push_index ON " + TABLE_NAME + " (" + PENDING_PUSH_ATTACHMENT + ");",
   };
 
+  private static final Executor thumbnailGenerator = Executors.newSingleThreadExecutor();
+
   public PartDatabase(Context context, SQLiteOpenHelper databaseHelper) {
     super(context, databaseHelper);
+  }
+
+  public InputStream getPartStream(MasterSecret masterSecret, long partId)
+      throws FileNotFoundException
+  {
+    return getDataStream(masterSecret, partId, DATA);
+  }
+
+  public InputStream getThumbnailStream(MasterSecret masterSecret, long partId)
+      throws FileNotFoundException
+  {
+    return getDataStream(masterSecret, partId, THUMBNAIL);
+  }
+
+  public long getPartSize(MasterSecret masterSecret, long partId) {
+    PduPart part = getPart(masterSecret, partId, false);
+    if (part != null) return part.getDataSize();
+    else              return 0;
+  }
+
+  public void updateFailedDownloadedPart(long messageId, long partId, PduPart part)
+      throws MmsException
+  {
+    SQLiteDatabase database = databaseHelper.getWritableDatabase();
+
+    part.setContentDisposition(new byte[0]);
+    part.setPendingPush(false);
+
+    ContentValues values = getContentValuesForPart(part);
+
+    values.put(DATA, (String)null);
+
+    database.update(TABLE_NAME, values, ID_WHERE, new String[] {partId+""});
+    notifyConversationListeners(DatabaseFactory.getMmsDatabase(context).getThreadIdForMessage(messageId));
+  }
+
+  public PduPart getPart(MasterSecret masterSecret, long partId, boolean includeData) {
+    SQLiteDatabase database = databaseHelper.getReadableDatabase();
+    Cursor cursor           = null;
+
+    try {
+      cursor = database.query(TABLE_NAME, null, ID_WHERE, new String[] {partId+""}, null, null, null);
+
+      if (cursor != null && cursor.moveToFirst()) return getPart(masterSecret, cursor, includeData);
+      else                                        return null;
+
+    } finally {
+      if (cursor != null)
+        cursor.close();
+    }
+  }
+
+  public List<Pair<Long, PduPart>> getParts(MasterSecret masterSecret, long mmsId, boolean includeData) {
+    SQLiteDatabase            database = databaseHelper.getReadableDatabase();
+    List<Pair<Long, PduPart>> results  = new LinkedList<Pair<Long, PduPart>>();
+    Cursor                    cursor   = null;
+
+    try {
+      cursor = database.query(TABLE_NAME, null, MMS_ID + " = ?", new String[] {mmsId+""},
+                              null, null, null);
+
+      while (cursor != null && cursor.moveToNext()) {
+        PduPart part = getPart(masterSecret, cursor, includeData);
+        results.add(new Pair<Long, PduPart>(cursor.getLong(cursor.getColumnIndexOrThrow(ID)),
+                                            part));
+      }
+
+      return results;
+    } finally {
+      if (cursor != null)
+        cursor.close();
+    }
+  }
+
+  public List<Pair<Long, Pair<Long, PduPart>>> getPushPendingParts(MasterSecret masterSecret) {
+    SQLiteDatabase                        database = databaseHelper.getReadableDatabase();
+    List<Pair<Long, Pair<Long, PduPart>>> results  = new LinkedList<Pair<Long, Pair<Long, PduPart>>>();
+    Cursor                                cursor   = null;
+
+    try {
+      cursor = database.query(TABLE_NAME, null, PENDING_PUSH_ATTACHMENT + " = ?",
+                              new String[] {"1"}, null, null, null);
+
+      while (cursor != null && cursor.moveToNext()) {
+        PduPart part = getPart(masterSecret, cursor, false);
+        results.add(new Pair<Long, Pair<Long, PduPart>>(cursor.getLong(cursor.getColumnIndexOrThrow(MMS_ID)),
+                                                        new Pair<Long, PduPart>(cursor.getLong(cursor.getColumnIndexOrThrow(ID)),
+                                                                                part)));
+      }
+
+      return results;
+    } finally {
+      if (cursor != null)
+        cursor.close();
+    }
+  }
+
+  public void deleteParts(long mmsId) {
+    SQLiteDatabase database = databaseHelper.getWritableDatabase();
+    Cursor cursor           = null;
+
+    try {
+      cursor = database.query(TABLE_NAME, new String[] {DATA, THUMBNAIL}, MMS_ID + " = ?",
+                              new String[] {mmsId+""}, null, null, null);
+
+      while (cursor != null && cursor.moveToNext()) {
+        String data      = cursor.getString(0);
+        String thumbnail = cursor.getString(1);
+
+        if (!TextUtils.isEmpty(data)) {
+          new File(data).delete();
+        }
+
+        if (!TextUtils.isEmpty(thumbnail)) {
+          new File(thumbnail).delete();
+        }
+      }
+    } finally {
+      if (cursor != null)
+        cursor.close();
+    }
+
+    database.delete(TABLE_NAME, MMS_ID + " = ?", new String[] {mmsId+""});
+  }
+
+  public void deleteAllParts() {
+    SQLiteDatabase database = databaseHelper.getWritableDatabase();
+    database.delete(TABLE_NAME, null, null);
+
+    File   partsDirectory = context.getDir("parts", Context.MODE_PRIVATE);
+    File[] parts          = partsDirectory.listFiles();
+
+    for (int i=0;i<parts.length;i++) {
+      parts[i].delete();
+    }
+  }
+
+  void insertParts(MasterSecret masterSecret, long mmsId, PduBody body) throws MmsException {
+    for (int i=0;i<body.getPartsNum();i++) {
+      long partId = insertPart(masterSecret, body.getPart(i), mmsId);
+      Log.w("PartDatabase", "Inserted part at ID: " + partId);
+    }
   }
 
   private void getPartValues(PduPart part, Cursor cursor) {
@@ -126,8 +280,18 @@ public class PartDatabase extends Database {
 
     if (!cursor.isNull(pendingPushColumn))
       part.setPendingPush(cursor.getInt(pendingPushColumn) == 1);
-  }
 
+    int thumbnailColumn = cursor.getColumnIndexOrThrow(THUMBNAIL);
+
+    if (!cursor.isNull(thumbnailColumn))
+      part.setThumbnailUri(ContentUris.withAppendedId(PartAuthority.THUMB_CONTENT_URI,
+                                                      cursor.getLong(cursor.getColumnIndexOrThrow(ID))));
+
+    int sizeColumn = cursor.getColumnIndexOrThrow(SIZE);
+
+    if (!cursor.isNull(sizeColumn))
+      part.setDataSize(cursor.getLong(cursor.getColumnIndexOrThrow(SIZE)));
+  }
 
   private ContentValues getContentValuesForPart(PduPart part) throws MmsException {
     ContentValues contentValues = new ContentValues();
@@ -172,22 +336,55 @@ public class PartDatabase extends Database {
     return contentValues;
   }
 
-  protected FileInputStream getPartInputStream(File file, PduPart part) throws FileNotFoundException {
-    Log.w("PartDatabase", "Reading non-encrypted part from: " + file.getAbsolutePath());
-    return new FileInputStream(file);
+  private InputStream getPartInputStream(MasterSecret masterSecret, File path, PduPart part)
+      throws FileNotFoundException
+  {
+    Log.w("PartDatabase", "Getting part at: " + path.getAbsolutePath());
+    return new DecryptingPartInputStream(path, masterSecret);
   }
 
-  protected FileOutputStream getPartOutputStream(File file, PduPart part) throws FileNotFoundException {
-    Log.w("PartDatabase", "Writing non-encrypted part to: " + file.getAbsolutePath());
-    return new FileOutputStream(file);
+  protected OutputStream getPartOutputStream(MasterSecret masterSecret, File path, PduPart part)
+      throws FileNotFoundException
+  {
+    Log.w("PartDatabase", "Writing part to: " + path.getAbsolutePath());
+    part.setEncrypted(true);
+    return new EncryptingPartOutputStream(path, masterSecret);
   }
 
-  private void readPartData(PduPart part, String filename) {
+  private InputStream getDataStream(MasterSecret masterSecret, long partId, String dataType)
+      throws FileNotFoundException
+  {
+    SQLiteDatabase database = databaseHelper.getReadableDatabase();
+    Cursor         cursor   = null;
+
     try {
-      File dataFile              = new File(filename);
-      FileInputStream fin        = getPartInputStream(dataFile, part);
-      ByteArrayOutputStream baos = new ByteArrayOutputStream((int)dataFile.length());
-      byte[] buffer              = new byte[512];
+      cursor = database.query(TABLE_NAME, new String[]{dataType, ENCRYPTED}, ID_WHERE,
+                              new String[] {partId+""}, null, null, null);
+
+      if (cursor != null && cursor.moveToFirst()) {
+        PduPart part = new PduPart();
+        part.setEncrypted(cursor.getInt(1) == 1);
+
+        if (cursor.isNull(0)) {
+          throw new FileNotFoundException("No part data for id: " + partId);
+        }
+
+        return getPartInputStream(masterSecret, new File(cursor.getString(0)), part);
+      } else {
+        throw new FileNotFoundException("No part for id: " + partId);
+      }
+    } finally {
+      if (cursor != null)
+        cursor.close();
+    }
+  }
+
+  private void readPartData(MasterSecret masterSecret, PduPart part, String filename) {
+    try {
+      File                  dataFile = new File(filename);
+      InputStream           fin      = getPartInputStream(masterSecret, dataFile, part);
+      ByteArrayOutputStream baos     = new ByteArrayOutputStream((int) dataFile.length());
+      byte[]                buffer   = new byte[512];
       int read;
 
       while ((read = fin.read(buffer)) != -1)
@@ -201,115 +398,87 @@ public class PartDatabase extends Database {
     }
   }
 
-  private File writePartData(PduPart part, InputStream in) throws MmsException {
+  private Pair<File, Long> writePartData(MasterSecret masterSecret, PduPart part, InputStream in)
+      throws MmsException
+  {
     try {
-      File partsDirectory   = context.getDir("parts", Context.MODE_PRIVATE);
-      File dataFile         = File.createTempFile("part", ".mms", partsDirectory);
-      FileOutputStream fout = getPartOutputStream(dataFile, part);
+      File         partsDirectory  = context.getDir("parts", Context.MODE_PRIVATE);
+      File         dataFile        = File.createTempFile("part", ".mms", partsDirectory);
+      OutputStream out             = getPartOutputStream(masterSecret, dataFile, part);
+      long         plaintextLength = org.whispersystems.textsecure.util.Util.copy(in, out);
 
-      byte[] buf = new byte[512];
-      int read;
-
-      while ((read = in.read(buf)) != -1) {
-        fout.write(buf, 0, read);
-      }
-
-      fout.close();
-      in.close();
-
-      return dataFile;
+      return new Pair<File, Long>(dataFile, plaintextLength);
     } catch (IOException e) {
-      throw new AssertionError(e);
+      throw new MmsException(e);
     }
   }
 
-  private File writePartData(PduPart part) throws MmsException {
+  private Pair<File, Long> writePartData(MasterSecret masterSecret, PduPart part)
+      throws MmsException
+  {
     try {
       if (part.getData() != null) {
         Log.w("PartDatabase", "Writing part data from buffer");
-        return writePartData(part, new ByteArrayInputStream(part.getData()));
+        return writePartData(masterSecret, part, new ByteArrayInputStream(part.getData()));
       } else if (part.getDataUri() != null) {
         Log.w("PartDatabase", "Writing part dat from URI");
         InputStream in = context.getContentResolver().openInputStream(part.getDataUri());
-        return writePartData(part, in);
+        return writePartData(masterSecret, part, in);
       } else {
         throw new MmsException("Part is empty!");
       }
     } catch (FileNotFoundException e) {
-      throw new AssertionError(e);
+      throw new MmsException(e);
     }
   }
 
-  private PduPart getPart(Cursor cursor, boolean includeData) {
+  private PduPart getPart(MasterSecret masterSecret, Cursor cursor, boolean includeData) {
     PduPart part        = new PduPart();
     String dataLocation = cursor.getString(cursor.getColumnIndexOrThrow(DATA));
     long partId         = cursor.getLong(cursor.getColumnIndexOrThrow(ID));
 
     getPartValues(part, cursor);
-    if (includeData && !part.isPendingPush())
-      readPartData(part, dataLocation);
-    part.setDataUri(ContentUris.withAppendedId(PartProvider.CONTENT_URI, partId));
+
+    if (includeData && !part.isPendingPush()) {
+      readPartData(masterSecret, part, dataLocation);
+    }
+
+    part.setDataUri(ContentUris.withAppendedId(PartAuthority.PART_CONTENT_URI, partId));
 
     return part;
   }
 
-  private long insertPart(PduPart part, long mmsId) throws MmsException {
-    SQLiteDatabase database = databaseHelper.getWritableDatabase();
-    File           dataFile = null;
+  private long insertPart(MasterSecret masterSecret, PduPart part, long mmsId) throws MmsException {
+    SQLiteDatabase   database = databaseHelper.getWritableDatabase();
+    Pair<File, Long> dataFile = null;
 
     if (!part.isPendingPush()) {
-      dataFile = writePartData(part);
-      Log.w("PartDatabase", "Wrote part to file: " + dataFile.getAbsolutePath());
+      dataFile = writePartData(masterSecret, part);
+      Log.w("PartDatabase", "Wrote part to file: " + dataFile.first.getAbsolutePath());
     }
 
     ContentValues contentValues = getContentValuesForPart(part);
     contentValues.put(MMS_ID, mmsId);
 
     if (dataFile != null) {
-      contentValues.put(DATA, dataFile.getAbsolutePath());
+      contentValues.put(DATA, dataFile.first.getAbsolutePath());
+      contentValues.put(SIZE, dataFile.second);
     }
 
-    return database.insert(TABLE_NAME, null, contentValues);
+    long partId = database.insert(TABLE_NAME, null, contentValues);
+
+    thumbnailGenerator.execute(new GenerateThumbnailTask(masterSecret, partId));
+
+    return partId;
   }
 
-  public InputStream getPartStream(long partId) throws FileNotFoundException {
-    SQLiteDatabase database = databaseHelper.getReadableDatabase();
-    Cursor cursor           = null;
 
-    Log.w("PartDatabase", "Getting part at ID: " + partId);
-    try {
-      cursor = database.query(TABLE_NAME, new String[]{DATA, ENCRYPTED}, ID_WHERE, new String[] {partId+""}, null, null, null);
-
-      if (cursor != null && cursor.moveToFirst()) {
-        PduPart part = new PduPart();
-        part.setEncrypted(cursor.getInt(1) == 1);
-
-        if (cursor.isNull(0)) {
-          throw new FileNotFoundException("No part data for id: " + partId);
-        }
-
-        return getPartInputStream(new File(cursor.getString(0)), part);
-      } else {
-        throw new FileNotFoundException("No part for id: " + partId);
-      }
-    } finally {
-      if (cursor != null)
-        cursor.close();
-    }
-  }
-
-  void insertParts(long mmsId, PduBody body) throws MmsException {
-    for (int i=0;i<body.getPartsNum();i++) {
-      long partId = insertPart(body.getPart(i), mmsId);
-      Log.w("PartDatabase", "Inserted part at ID: " + partId);
-    }
-  }
-
-  public void updateDownloadedPart(long messageId, long partId, PduPart part, InputStream data)
+  public void updateDownloadedPart(MasterSecret masterSecret, long messageId,
+                                   long partId, PduPart part, InputStream data)
       throws MmsException
   {
-    SQLiteDatabase database = databaseHelper.getWritableDatabase();
-    File           partData = writePartData(part, data);
+    SQLiteDatabase   database = databaseHelper.getWritableDatabase();
+    Pair<File, Long> partData = writePartData(masterSecret, part, data);
 
     part.setContentDisposition(new byte[0]);
     part.setPendingPush(false);
@@ -317,120 +486,85 @@ public class PartDatabase extends Database {
     ContentValues values = getContentValuesForPart(part);
 
     if (partData != null) {
-      values.put(DATA, partData.getAbsolutePath());
+      values.put(DATA, partData.first.getAbsolutePath());
+      values.put(SIZE, partData.second);
     }
 
     database.update(TABLE_NAME, values, ID_WHERE, new String[] {partId+""});
     notifyConversationListeners(DatabaseFactory.getMmsDatabase(context).getThreadIdForMessage(messageId));
   }
 
-  public void updateFailedDownloadedPart(long messageId, long partId, PduPart part)
-      throws MmsException
-  {
+  private void updatePartThumbnail(long partId, File thumbnail) {
     SQLiteDatabase database = databaseHelper.getWritableDatabase();
+    ContentValues  values   = new ContentValues();
+    values.put(THUMBNAIL, thumbnail.getAbsolutePath());
 
-    part.setContentDisposition(new byte[0]);
-    part.setPendingPush(false);
-
-    ContentValues values = getContentValuesForPart(part);
-
-    values.put(DATA, (String)null);
-
-    database.update(TABLE_NAME, values, ID_WHERE, new String[] {partId+""});
-    notifyConversationListeners(DatabaseFactory.getMmsDatabase(context).getThreadIdForMessage(messageId));
+    database.update(TABLE_NAME, values, ID_WHERE, new String[] {partId + ""});
   }
 
-  public PduPart getPart(long partId, boolean includeData) {
-    SQLiteDatabase database = databaseHelper.getReadableDatabase();
-    Cursor cursor           = null;
+  private class GenerateThumbnailTask implements Runnable {
 
-    try {
-      cursor = database.query(TABLE_NAME, null, ID_WHERE, new String[] {partId+""}, null, null, null);
+    private final MasterSecret masterSecret;
+    private final long partId;
 
-      if (cursor != null && cursor.moveToFirst())
-        return getPart(cursor, includeData);
-      else
-        return null;
-    } finally {
-      if (cursor != null)
-        cursor.close();
-    }
-  }
-
-  public List<Pair<Long, PduPart>> getParts(long mmsId, boolean includeData) {
-    SQLiteDatabase            database = databaseHelper.getReadableDatabase();
-    List<Pair<Long, PduPart>> results  = new LinkedList<Pair<Long, PduPart>>();
-    Cursor                    cursor   = null;
-
-    try {
-      cursor = database.query(TABLE_NAME, null, MMS_ID + " = ?", new String[] {mmsId+""}, null, null, null);
-
-      while (cursor != null && cursor.moveToNext()) {
-        PduPart part = getPart(cursor, includeData);
-        results.add(new Pair<Long, PduPart>(cursor.getLong(cursor.getColumnIndexOrThrow(ID)),
-                                            part));
-      }
-
-      return results;
-    } finally {
-      if (cursor != null)
-        cursor.close();
-    }
-  }
-
-  public List<Pair<Long, Pair<Long, PduPart>>> getPushPendingParts() {
-    SQLiteDatabase                        database = databaseHelper.getReadableDatabase();
-    List<Pair<Long, Pair<Long, PduPart>>> results  = new LinkedList<Pair<Long, Pair<Long, PduPart>>>();
-    Cursor                                cursor   = null;
-
-    try {
-      cursor = database.query(TABLE_NAME, null, PENDING_PUSH_ATTACHMENT + " = ?", new String[] {"1"}, null, null, null);
-
-      while (cursor != null && cursor.moveToNext()) {
-        PduPart part = getPart(cursor, false);
-        results.add(new Pair<Long, Pair<Long, PduPart>>(cursor.getLong(cursor.getColumnIndexOrThrow(MMS_ID)),
-                                                        new Pair<Long, PduPart>(cursor.getLong(cursor.getColumnIndexOrThrow(ID)),
-                                                                                part)));
-      }
-
-      return results;
-    } finally {
-      if (cursor != null)
-        cursor.close();
+    public GenerateThumbnailTask(MasterSecret masterSecret, long partId) {
+      this.masterSecret = masterSecret;
+      this.partId       = partId;
     }
 
-  }
+    @Override
+    public void run() {
+      try {
+        PduPart part = getPart(masterSecret, partId, false);
 
-  public void deleteParts(long mmsId) {
-    SQLiteDatabase database = databaseHelper.getWritableDatabase();
-    Cursor cursor           = null;
-
-    try {
-      cursor = database.query(TABLE_NAME, new String[] {DATA}, MMS_ID + " = ?", new String[] {mmsId+""}, null, null, null);
-
-      while (cursor != null && cursor.moveToNext()) {
-        String data = cursor.getString(0);
-        if (!TextUtils.isEmpty(data)) {
-          new File(cursor.getString(0)).delete();
+        if (part.getThumbnailUri() != null) {
+          return;
         }
+
+        Bitmap thumbnail = generateThumbnailForPart(part);
+
+        if (thumbnail != null) {
+          ByteArrayOutputStream thumbnailBytes = new ByteArrayOutputStream();
+          thumbnail.compress(Bitmap.CompressFormat.JPEG, 85, thumbnailBytes);
+            
+          Pair<File, Long> thumbnailFile = writePartData(masterSecret, part,
+                                                         new ByteArrayInputStream(thumbnailBytes.toByteArray()));
+          updatePartThumbnail(partId, thumbnailFile.first);
+        }
+      } catch (MmsException e) {
+        Log.w("PartDatabase", e);
       }
-    } finally {
-      if (cursor != null)
-        cursor.close();
     }
 
-    database.delete(TABLE_NAME, MMS_ID + " = ?", new String[] {mmsId+""});
-  }
+    private Bitmap generateThumbnailForPart(PduPart part) {
+      String contentType = new String(part.getContentType());
 
-  public void deleteAllParts() {
-    SQLiteDatabase database = databaseHelper.getWritableDatabase();
-    database.delete(TABLE_NAME, null, null);
+      if      (ContentType.isImageType(contentType)) return generateImageThumbnail(part);
+//      else if (ContentType.isVideoType(contentType)) return generateVideoThumbnail(part);
+      else                                           return null;
+    }
 
-    File partsDirectory = context.getDir("parts", Context.MODE_PRIVATE);
-    File[] parts        = partsDirectory.listFiles();
+//    private Bitmap generateVideoThumbnail(PduPart part) {
+//      MediaMetadataRetriever metadataRetriever = new MediaMetadataRetriever();
+//      metadataRetriever.setDataSource(context, part.getDataUri());
+//      return metadataRetriever.getFrameAtTime(-1);
+//    }
 
-    for (int i=0;i<parts.length;i++) {
-      parts[i].delete();
+    private Bitmap generateImageThumbnail(PduPart part) {
+      try {
+        long        partId        = ContentUris.parseId(part.getDataUri());
+        InputStream measureStream = getPartStream(masterSecret, partId);
+        InputStream dataStream    = getPartStream(masterSecret, partId);
+
+        return BitmapUtil.createScaledBitmap(measureStream, dataStream, 345, 261);
+      } catch (FileNotFoundException e) {
+        Log.w("PartDataase", e);
+        return null;
+      } catch (BitmapDecodingException e) {
+        Log.w("PartDatabase", e);
+        return null;
+      }
     }
   }
+
 }

@@ -123,6 +123,8 @@ public class PduPart {
 
      private boolean isEncrypted;
      private boolean isPendingPush;
+     private Uri     thumbnailUri;
+     private long    dataSize;
      
      /**
       * Empty Constructor.
@@ -146,7 +148,23 @@ public class PduPart {
      public boolean isPendingPush() {
        return isPendingPush;
      }
-     
+
+     public void setThumbnailUri(Uri thumbnailUri) {
+       this.thumbnailUri = thumbnailUri;
+     }
+
+     public Uri getThumbnailUri() {
+       return this.thumbnailUri;
+     }
+
+     public void setDataSize(long dataSize) {
+       this.dataSize = dataSize;
+     }
+
+     public long getDataSize() {
+       return this.dataSize;
+     }
+
      /**
       * Set part data. The data are stored as byte array.
       *

@@ -16,7 +16,10 @@
  */
 package org.thoughtcrime.securesms.mms;
 
+import android.content.ContentResolver;
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.drawable.AnimationDrawable;
 import android.graphics.drawable.BitmapDrawable;
@@ -25,6 +28,7 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.TransitionDrawable;
 import android.net.Uri;
 import android.os.Handler;
+import android.provider.MediaStore;
 import android.util.Log;
 import android.widget.ImageView;
 
@@ -48,16 +52,12 @@ import ws.com.google.android.mms.pdu.PduPart;
 
 public class ImageSlide extends Slide {
 
-  private static final int MAX_CACHE_SIZE = 10;
-  private static final Map<Uri, SoftReference<Drawable>> thumbnailCache =
-      Collections.synchronizedMap(new LRUCache<Uri, SoftReference<Drawable>>(MAX_CACHE_SIZE));
-
   public ImageSlide(Context context, MasterSecret masterSecret, PduPart part) {
     super(context, masterSecret, part);
   }
 
   public ImageSlide(Context context, Uri uri) throws IOException, BitmapDecodingException {
-    super(context, constructPartFromUri(context, uri));
+    super(context, constructPartFromUri(uri));
   }
 		
   @Override
@@ -70,6 +70,17 @@ public class ImageSlide extends Slide {
 
     if (part.isPendingPush()) {
       return context.getResources().getDrawable(R.drawable.stat_sys_download);
+    }
+
+    if (part.getThumbnailUri() != null) {
+      try {
+        Log.w("ImageSlide", "Getting database cached thumbnail...");
+        return new BitmapDrawable(context.getResources(),
+                                  BitmapFactory.decodeStream(PartAuthority.getPartStream(context, masterSecret,
+                                                                                         part.getThumbnailUri())));
+      } catch (FileNotFoundException e) {
+        Log.w("ImageSlide", e);
+      }
     }
 
     try {
@@ -90,85 +101,15 @@ public class ImageSlide extends Slide {
   }
 
   @Override
-  public void setThumbnailOn(ImageView imageView) {
-    Drawable thumbnail = getCachedThumbnail();
-
-    if (thumbnail != null) {
-      Log.w("ImageSlide", "Setting cached thumbnail...");
-      setThumbnailOn(imageView, thumbnail, true);
-      return;
-    }
-
-    final ColorDrawable temporaryDrawable        = new ColorDrawable(Color.TRANSPARENT);
-    final WeakReference<ImageView> weakImageView = new WeakReference<ImageView>(imageView);
-    final Handler handler                        = new Handler();
-    final int maxWidth                           = imageView.getWidth();
-    final int maxHeight                          = imageView.getHeight();
-
-    imageView.setImageDrawable(temporaryDrawable);
-
-    if (maxWidth == 0 || maxHeight == 0)
-      return;
-
-    MmsDatabase.slideResolver.execute(new Runnable() {
-      @Override
-      public void run() {
-        final Drawable  bitmap      = getThumbnail(maxWidth, maxHeight);
-        final ImageView destination = weakImageView.get();
-
-        if (destination != null && destination.getDrawable() == temporaryDrawable) {
-          handler.post(new Runnable() {
-            @Override
-            public void run() {
-              setThumbnailOn(destination, bitmap, false);
-            }
-          });
-        }
-      }
-    });
-  }
-
-  private void setThumbnailOn(ImageView imageView, Drawable thumbnail, boolean fromMemory) {
-    if (fromMemory) {
-      imageView.setImageDrawable(thumbnail);
-    } else if (thumbnail instanceof AnimationDrawable) {
-      imageView.setImageDrawable(thumbnail);
-      ((AnimationDrawable)imageView.getDrawable()).start();
-    } else {
-      TransitionDrawable fadingResult = new TransitionDrawable(new Drawable[]{new ColorDrawable(Color.TRANSPARENT), thumbnail});
-      imageView.setImageDrawable(fadingResult);
-      fadingResult.startTransition(300);
-    }
-  }
-
-  private Drawable getCachedThumbnail() {
-    synchronized (thumbnailCache) {
-      SoftReference<Drawable> bitmapReference = thumbnailCache.get(part.getDataUri());
-      Log.w("ImageSlide", "Got soft reference: " + bitmapReference);
-
-      if (bitmapReference != null) {
-        Drawable bitmap = bitmapReference.get();
-        Log.w("ImageSlide", "Got cached bitmap: " + bitmap);
-        if (bitmap != null) return bitmap;
-        else                thumbnailCache.remove(part.getDataUri());
-      }
-    }
-
-    return null;
-  }
-
-  @Override
   public boolean hasImage() {
     return true;
   }
 	
-  private static PduPart constructPartFromUri(Context context, Uri uri)
+  private static PduPart constructPartFromUri(Uri uri)
       throws IOException, BitmapDecodingException
   {
     PduPart part = new PduPart();
-    byte[] data  = BitmapUtil.createScaledBytes(context, uri, 640, 480, (300 * 1024) - 5000);
 
-    part.setData(data);
     part.setDataUri(uri);
     part.setContentType(ContentType.IMAGE_JPEG.getBytes());
     part.setContentId((System.currentTimeMillis()+"").getBytes());

@@ -7,6 +7,7 @@ import com.google.thoughtcrimegson.Gson;
 import com.google.thoughtcrimegson.JsonParseException;
 
 import org.apache.http.conn.ssl.StrictHostnameVerifier;
+import org.whispersystems.textsecure.crypto.AttachmentCipherOutputStream;
 import org.whispersystems.textsecure.crypto.IdentityKey;
 import org.whispersystems.textsecure.storage.PreKeyRecord;
 import org.whispersystems.textsecure.util.Base64;
@@ -180,7 +181,8 @@ public class PushServiceSocket {
 
     Log.w("PushServiceSocket", "Got attachment content location: " + attachmentKey.getLocation());
 
-    uploadExternalFile("PUT", attachmentKey.getLocation(), attachment.getData());
+    uploadAttachment("PUT", attachmentKey.getLocation(), attachment.getData(),
+                     attachment.getDataSize(), attachment.getKey());
 
     return attachmentKey.getId();
   }
@@ -257,21 +259,27 @@ public class PushServiceSocket {
     }
   }
 
-  private void uploadExternalFile(String method, String url, byte[] data)
+  private void uploadAttachment(String method, String url, InputStream data, long dataSize, byte[] key)
     throws IOException
   {
     URL                uploadUrl  = new URL(url);
     HttpsURLConnection connection = (HttpsURLConnection) uploadUrl.openConnection();
     connection.setDoOutput(true);
+    connection.setFixedLengthStreamingMode((int) AttachmentCipherOutputStream.getCiphertextLength(dataSize));
     connection.setRequestMethod(method);
     connection.setRequestProperty("Content-Type", "application/octet-stream");
     connection.connect();
 
+    long startTime = System.currentTimeMillis();
+    Log.w("PushServiceSocket", "Estimating: " + AttachmentCipherOutputStream.getCiphertextLength(dataSize));
     try {
-      OutputStream out = connection.getOutputStream();
-      out.write(data);
-      out.close();
+      OutputStream                 stream = connection.getOutputStream();
+      AttachmentCipherOutputStream out    = new AttachmentCipherOutputStream(stream, key);
 
+      Util.copy(data, out);
+      out.flush();
+
+      Log.w("PushServiceSocket", "Finished writing: " + (System.currentTimeMillis() - startTime)); 
       if (connection.getResponseCode() != 200) {
         throw new IOException("Bad response: " + connection.getResponseCode() + " " + connection.getResponseMessage());
       }

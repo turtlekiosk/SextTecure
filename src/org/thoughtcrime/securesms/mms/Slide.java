@@ -16,31 +16,42 @@
  */
 package org.thoughtcrime.securesms.mms;
 
+import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.Color;
+import android.graphics.drawable.AnimationDrawable;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.TransitionDrawable;
+import android.net.Uri;
+import android.os.Handler;
+import android.util.Log;
+import android.widget.ImageView;
+
+import org.thoughtcrime.securesms.database.MmsDatabase;
+import org.thoughtcrime.securesms.util.LRUCache;
+import org.thoughtcrime.securesms.util.Util;
+import org.whispersystems.textsecure.crypto.MasterSecret;
+
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
-
-import org.whispersystems.textsecure.crypto.MasterSecret;
-import org.thoughtcrime.securesms.database.DatabaseFactory;
-import org.thoughtcrime.securesms.providers.PartProvider;
-
-import android.content.ContentUris;
-import android.content.Context;
-import android.graphics.Bitmap;
-import android.graphics.drawable.Drawable;
-import android.net.Uri;
-import android.util.Log;
-import android.widget.ImageView;
+import java.lang.ref.SoftReference;
+import java.lang.ref.WeakReference;
+import java.util.Collections;
+import java.util.Map;
 
 import ws.com.google.android.mms.pdu.PduPart;
 
 public abstract class Slide {
 
-  protected static final int MAX_MESSAGE_SIZE = 1048576;
-	
-  protected final PduPart part;
-  protected final Context context;
-  protected MasterSecret masterSecret;
+  private   static final int MAX_CACHE_SIZE = 20;
+  protected static final Map<Uri, SoftReference<Drawable>> thumbnailCache =
+      Collections.synchronizedMap(new LRUCache<Uri, SoftReference<Drawable>>(MAX_CACHE_SIZE));
+
+  protected final PduPart      part;
+  protected final Context      context;
+  protected       MasterSecret masterSecret;
 	
   public Slide(Context context, PduPart part) {
     this.part    = part;
@@ -53,34 +64,19 @@ public abstract class Slide {
   }
 	
   public InputStream getPartDataInputStream() throws FileNotFoundException {
-    Uri partUri = part.getDataUri();
-		
-    Log.w("Slide", "Loading Part URI: " + partUri);
-		
-    if (PartProvider.isAuthority(partUri))
-      return DatabaseFactory.getEncryptingPartDatabase(context, masterSecret).getPartStream(ContentUris.parseId(partUri));
-    else
-      return context.getContentResolver().openInputStream(partUri);
+		return PartAuthority.getPartStream(context, masterSecret, part.getDataUri());
   }
-	
-  protected static long getMediaSize(Context context, Uri uri) throws IOException {
-    InputStream in = context.getContentResolver().openInputStream(uri);
-    long size      = 0;
-    byte[] buffer  = new byte[512];
-    int read;
-		
-    while ((read = in.read(buffer)) != -1)
-      size += read;
-		
-    return size;
-  }
-	
+
   protected byte[] getPartData() {
-    if (part.getData() != null)
-      return part.getData();
-		
-    long partId = ContentUris.parseId(part.getDataUri());
-    return DatabaseFactory.getEncryptingPartDatabase(context, masterSecret).getPart(partId, true).getData();
+    try {
+      if (part.getData() != null)
+        return part.getData();
+
+      return Util.readFully(PartAuthority.getPartStream(context, masterSecret, part.getDataUri()));
+    } catch (IOException e) {
+      Log.w("Slide", e);
+      return new byte[0];
+    }
   }
 	
   public String getContentType() {
@@ -96,7 +92,48 @@ public abstract class Slide {
   }
 
   public void setThumbnailOn(ImageView imageView) {
-    imageView.setImageDrawable(getThumbnail(imageView.getWidth(), imageView.getHeight()));
+    final long setBegin = System.currentTimeMillis();
+    Drawable thumbnail = getCachedThumbnail();
+
+    if (thumbnail != null) {
+      Log.w("ImageSlide", "Setting cached thumbnail...");
+      setThumbnailOn(imageView, thumbnail, true);
+      return;
+    }
+
+    final ColorDrawable            temporaryDrawable = new ColorDrawable(Color.TRANSPARENT);
+    final WeakReference<ImageView> weakImageView     = new WeakReference<ImageView>(imageView);
+    final Handler                  handler           = new Handler();
+    final int                      maxWidth          = imageView.getWidth();
+    final int                      maxHeight         = imageView.getHeight();
+
+    imageView.setImageDrawable(temporaryDrawable);
+
+    if (maxWidth == 0 || maxHeight == 0)
+      return;
+
+    MmsDatabase.slideResolver.execute(new Runnable() {
+      @Override
+      public void run() {
+        final long      startThumb  = System.currentTimeMillis();
+        final Drawable  bitmap      = getThumbnail(maxWidth, maxHeight);
+        final ImageView destination = weakImageView.get();
+
+        if (destination != null && destination.getDrawable() == temporaryDrawable) {
+          handler.post(new Runnable() {
+            @Override
+            public void run() {
+              setThumbnailOn(destination, bitmap, false);
+              long endThumb = System.currentTimeMillis();
+              Log.w("Slide", "Thumbnail generation: " + (endThumb - startThumb) + " millis.");
+              Log.w("Slide", "Full process: " + (endThumb - setBegin) + " millis.");
+            }
+          });
+        }
+      }
+    });
+
+//    imageView.setImageDrawable(getThumbnail(imageView.getWidth(), imageView.getHeight()));
   }
 
   public boolean hasImage() {
@@ -126,4 +163,34 @@ public abstract class Slide {
   public PduPart getPart() {
     return part;
   }
+
+  private void setThumbnailOn(ImageView imageView, Drawable thumbnail, boolean fromMemory) {
+    if (fromMemory) {
+      imageView.setImageDrawable(thumbnail);
+    } else if (thumbnail instanceof AnimationDrawable) {
+      imageView.setImageDrawable(thumbnail);
+      ((AnimationDrawable)imageView.getDrawable()).start();
+    } else {
+      TransitionDrawable fadingResult = new TransitionDrawable(new Drawable[]{new ColorDrawable(Color.TRANSPARENT), thumbnail});
+      imageView.setImageDrawable(fadingResult);
+      fadingResult.startTransition(300);
+    }
+  }
+
+  protected Drawable getCachedThumbnail() {
+    synchronized (thumbnailCache) {
+      SoftReference<Drawable> bitmapReference = thumbnailCache.get(part.getDataUri());
+      Log.w("Slide", "Got soft reference: " + bitmapReference);
+
+      if (bitmapReference != null) {
+        Drawable bitmap = bitmapReference.get();
+        Log.w("Slide", "Got cached bitmap: " + bitmap);
+        if (bitmap != null) return bitmap;
+        else                thumbnailCache.remove(part.getDataUri());
+      }
+    }
+
+    return null;
+  }
+
 }

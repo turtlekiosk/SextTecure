@@ -16,21 +16,25 @@
  */
 package org.thoughtcrime.securesms.mms;
 
-import java.io.IOException;
-
-import org.thoughtcrime.securesms.R;
-
-import ws.com.google.android.mms.pdu.PduPart;
+import android.annotation.SuppressLint;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.database.Cursor;
-import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
+import android.media.MediaMetadataRetriever;
 import android.net.Uri;
+import android.os.Build;
 import android.provider.MediaStore;
 import android.util.Log;
-import android.widget.ImageView;
+
+import org.thoughtcrime.securesms.R;
+
+import java.io.FileNotFoundException;
+import java.io.IOException;
+
+import ws.com.google.android.mms.pdu.PduPart;
 
 public class VideoSlide extends Slide {
 
@@ -41,10 +45,39 @@ public class VideoSlide extends Slide {
   public VideoSlide(Context context, Uri uri) throws IOException, MediaTooLargeException {
     super(context, constructPartFromUri(context, uri));
   }
-	
+
+  @SuppressLint("NewApi")
   @Override
   public Drawable getThumbnail(int width, int height) {
-    return context.getResources().getDrawable(R.drawable.ic_launcher_video_player);
+    Drawable thumbnail = getCachedThumbnail();
+
+    if (thumbnail != null) {
+      return thumbnail;
+    }
+
+    if (part.isPendingPush()) {
+      return context.getResources().getDrawable(R.drawable.stat_sys_download);
+    }
+
+    if (part.getThumbnailUri() != null) {
+      try {
+        return new BitmapDrawable(context.getResources(),
+                                  BitmapFactory.decodeStream(PartAuthority.getPartStream(context, masterSecret,
+                                                                                         part.getThumbnailUri())));
+      } catch (FileNotFoundException e) {
+        Log.w("VideoSlide", e);
+      }
+    }
+
+    if (!PartAuthority.isLocal(part.getDataUri()) &&
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.GINGERBREAD_MR1)
+    {
+      MediaMetadataRetriever metadataRetriever = new MediaMetadataRetriever();
+      metadataRetriever.setDataSource(context, part.getDataUri());
+      return new BitmapDrawable(context.getResources(), metadataRetriever.getFrameAtTime(-1));
+    } else {
+      return context.getResources().getDrawable(R.drawable.ic_launcher_video_player);
+    }
   }
 
   @Override
@@ -57,10 +90,12 @@ public class VideoSlide extends Slide {
     return true;
   }
 	
-  private static PduPart constructPartFromUri(Context context, Uri uri) throws IOException, MediaTooLargeException {
-    PduPart part             = new PduPart();
+  private static PduPart constructPartFromUri(Context context, Uri uri)
+      throws IOException, MediaTooLargeException
+  {
+    PduPart         part     = new PduPart();
     ContentResolver resolver = context.getContentResolver();
-    Cursor cursor            = null;
+    Cursor          cursor   = null;
 		
     try {
       cursor = resolver.query(uri, new String[] {MediaStore.Video.Media.MIME_TYPE}, null, null, null);
@@ -73,8 +108,8 @@ public class VideoSlide extends Slide {
         cursor.close();
     }
 		
-    if (getMediaSize(context, uri) > MAX_MESSAGE_SIZE)
-      throw new MediaTooLargeException("Video exceeds maximum message size.");
+//    if (getMediaSize(context, uri) > MAX_MESSAGE_SIZE)
+//      throw new MediaTooLargeException("Video exceeds maximum message size.");
 		
     part.setDataUri(uri);
     part.setContentId((System.currentTimeMillis()+"").getBytes());

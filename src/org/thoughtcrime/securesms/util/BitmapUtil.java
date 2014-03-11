@@ -23,12 +23,10 @@ public class BitmapUtil {
   private static final int MIN_COMPRESSION_QUALITY  = 50;
   private static final int MAX_COMPRESSION_ATTEMPTS = 4;
 
-  public static byte[] createScaledBytes(Context context, Uri uri, int maxWidth,
+  public static byte[] createScaledBytes(InputStream measure, InputStream data, int maxWidth,
                                          int maxHeight, int maxSize)
       throws IOException, BitmapDecodingException
   {
-    InputStream measure = context.getContentResolver().openInputStream(uri);
-    InputStream data    = context.getContentResolver().openInputStream(uri);
     Bitmap bitmap       = createScaledBitmap(measure, data, maxWidth, maxHeight);
     int quality         = MAX_COMPRESSION_QUALITY;
     int attempts        = 0;

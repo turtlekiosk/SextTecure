@@ -278,10 +278,6 @@
         </intent-filter>
     </receiver>
 
-    <provider android:name=".providers.PartProvider"
-              android:grantUriPermissions="true"
-              android:authorities="org.thoughtcrime.provider.securesms" />
-
     <receiver android:name=".service.RegistrationNotifier"
               android:exported="false">
         <intent-filter>
@@ -299,7 +295,5 @@
        <uses-library android:name="android.test.runner" />
 </application>
 
-<instrumentation android:name="android.test.InstrumentationTestRunner"
-       android:targetPackage="org.thoughtcrime.securesms.tests" android:label="Tests for My App" />
 
 </manifest>

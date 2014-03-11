@@ -25,8 +25,6 @@ import android.content.res.TypedArray;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.media.MediaScannerConnection;
-import android.net.ConnectivityManager;
-import android.net.NetworkInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
@@ -54,11 +52,9 @@ import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.service.SendReceiveService;
 import org.thoughtcrime.securesms.util.BitmapUtil;
 import org.thoughtcrime.securesms.util.DateUtils;
-import org.thoughtcrime.securesms.util.Emoji;
 import org.thoughtcrime.securesms.util.Dialogs;
+import org.thoughtcrime.securesms.util.Emoji;
 import org.whispersystems.textsecure.crypto.MasterSecret;
-import org.whispersystems.textsecure.directory.Directory;
-import org.whispersystems.textsecure.directory.NotInDirectoryException;
 import org.whispersystems.textsecure.storage.Session;
 import org.whispersystems.textsecure.util.FutureTaskListener;
 import org.whispersystems.textsecure.util.ListenableFutureTask;
@@ -424,10 +420,10 @@ public class ConversationItem extends LinearLayout {
     private static final int FAILURE              = 1;
     private static final int WRITE_ACCESS_FAILURE = 2;
 
-    private final Slide slide;
-    private ProgressDialog progressDialog;
-    private MediaScannerConnection mediaScannerConnection;
-    private File mediaFile;
+    private final Slide                  slide;
+    private       ProgressDialog         progressDialog;
+    private       MediaScannerConnection mediaScannerConnection;
+    private       File                   mediaFile;
 
     public ThumbnailSaveListener(Slide slide) {
       this.slide = slide;
@@ -463,15 +459,16 @@ public class ConversationItem extends LinearLayout {
     }
 
     private File constructOutputFile() throws IOException {
-      File sdCard = Environment.getExternalStorageDirectory();
       File outputDirectory;
 
-      if (slide.hasVideo())
-        outputDirectory = new File(sdCard.getAbsoluteFile() + File.separator + "Movies");
-      else if (slide.hasAudio())
-        outputDirectory = new File(sdCard.getAbsolutePath() + File.separator + "Music");
-      else
-        outputDirectory = new File(sdCard.getAbsolutePath() + File.separator + "Pictures");
+      if (slide.hasVideo()) {
+        outputDirectory = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "TextSecure");
+      } else if (slide.hasAudio()) {
+        outputDirectory = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "TextSecure");
+      } else {
+        outputDirectory = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "TextSecure");
+      }
+
       outputDirectory.mkdirs();
 
       MimeTypeMap mimeTypeMap = MimeTypeMap.getSingleton();
@@ -547,27 +544,16 @@ public class ConversationItem extends LinearLayout {
       this.slide = slide;
     }
 
-    private void fireIntent() {
-      Log.w("ConversationItem", "Clicked: " + slide.getUri() + " , " + slide.getContentType());
-      Intent intent = new Intent(Intent.ACTION_VIEW);
-      intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-      intent.setDataAndType(slide.getUri(), slide.getContentType());
-      context.startActivity(intent);
-    }
+//    private void fireIntent() {
+//      Log.w("ConversationItem", "Clicked: " + slide.getUri() + " , " + slide.getContentType());
+//      Intent intent = new Intent(Intent.ACTION_VIEW);
+//      intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+//      intent.setDataAndType(slide.getUri(), slide.getContentType());
+//      context.startActivity(intent);
+//    }
 
     public void onClick(View v) {
-      AlertDialog.Builder builder = new AlertDialog.Builder(context);
-      builder.setTitle(R.string.ConversationItem_view_secure_media_question);
-      builder.setIcon(Dialogs.resolveIcon(context, R.attr.dialog_alert_icon));
-      builder.setCancelable(true);
-      builder.setMessage(R.string.ConversationItem_this_media_has_been_stored_in_an_encrypted_database_external_viewer_warning);
-      builder.setPositiveButton(R.string.yes, new DialogInterface.OnClickListener() {
-        public void onClick(DialogInterface dialog, int which) {
-          fireIntent();
-        }
-      });
-      builder.setNegativeButton(R.string.no, null);
-      builder.show();
+      Toast.makeText(context, "Display something...", Toast.LENGTH_SHORT).show();
     }
   }
 

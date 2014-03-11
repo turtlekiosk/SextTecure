@@ -19,6 +19,7 @@ package org.thoughtcrime.securesms.mms;
 import android.content.Context;
 import android.net.Uri;
 import android.util.Log;
+import android.widget.ImageView;
 
 import org.whispersystems.textsecure.crypto.MasterSecret;
 import org.thoughtcrime.securesms.util.LRUCache;
@@ -47,7 +48,12 @@ public class TextSlide extends Slide {
   }
 
   @Override
-    public boolean hasText() {
+  public void setThumbnailOn(ImageView imageView) {
+    imageView.setImageDrawable(getThumbnail(imageView.getWidth(), imageView.getHeight()));
+  }
+
+  @Override
+  public boolean hasText() {
     return true;
   }
 	

@@ -17,6 +17,7 @@
 
 package org.thoughtcrime.securesms.transport;
 
+import android.content.ContentUris;
 import android.content.Context;
 import android.util.Log;
 
@@ -26,7 +27,9 @@ import org.thoughtcrime.securesms.crypto.KeyExchangeProcessor;
 import org.thoughtcrime.securesms.crypto.KeyExchangeProcessorV2;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.MmsSmsColumns;
+import org.thoughtcrime.securesms.database.PartDatabase;
 import org.thoughtcrime.securesms.database.model.SmsMessageRecord;
+import org.thoughtcrime.securesms.mms.PartAuthority;
 import org.thoughtcrime.securesms.mms.PartParser;
 import org.thoughtcrime.securesms.push.PushServiceSocketFactory;
 import org.thoughtcrime.securesms.recipients.Recipient;
@@ -59,6 +62,8 @@ import org.whispersystems.textsecure.util.Base64;
 import org.whispersystems.textsecure.util.InvalidNumberException;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.security.SecureRandom;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -163,7 +168,8 @@ public class PushTransport extends BaseTransport {
   private List<PushAttachmentPointer> getPushAttachmentPointers(PushServiceSocket socket, PduBody body)
       throws IOException
   {
-    List<PushAttachmentPointer> attachments = new LinkedList<PushAttachmentPointer>();
+    PartDatabase                partDatabase = DatabaseFactory.getPartDatabase(context);
+    List<PushAttachmentPointer> attachments  = new LinkedList<PushAttachmentPointer>();
 
     for (int i=0;i<body.getPartsNum();i++) {
       String contentType = Util.toIsoString(body.getPart(i).getContentType());
@@ -171,7 +177,12 @@ public class PushTransport extends BaseTransport {
           ContentType.isAudioType(contentType) ||
           ContentType.isVideoType(contentType))
       {
-        attachments.add(getPushAttachmentPointer(socket, contentType, body.getPart(i).getData()));
+        long        partId     = ContentUris.parseId(body.getPart(i).getDataUri());
+        long        dataSize   = partDatabase.getPartSize(masterSecret, partId);
+        InputStream dataStream = partDatabase.getPartStream(masterSecret, partId);
+
+        attachments.add(getPushAttachmentPointer(socket, contentType, dataStream, dataSize));
+        dataStream.close();
       }
     }
 
@@ -179,14 +190,14 @@ public class PushTransport extends BaseTransport {
   }
 
   private PushAttachmentPointer getPushAttachmentPointer(PushServiceSocket socket,
-                                                         String contentType, byte[] data)
+                                                         String contentType,
+                                                         InputStream data,
+                                                         long dataSize)
       throws IOException
   {
-    AttachmentCipher   cipher               = new AttachmentCipher();
-    byte[]             key                  = cipher.getCombinedKeyMaterial();
-    byte[]             ciphertextAttachment = cipher.encrypt(data);
-    PushAttachmentData attachmentData       = new PushAttachmentData(contentType, ciphertextAttachment);
-    long               attachmentId         = socket.sendAttachment(attachmentData);
+    byte[]             key            = org.whispersystems.textsecure.util.Util.getKey(64);
+    PushAttachmentData attachmentData = new PushAttachmentData(contentType, data, dataSize, key);
+    long               attachmentId   = socket.sendAttachment(attachmentData);
 
     return new PushAttachmentPointer(contentType, attachmentId, key);
   }

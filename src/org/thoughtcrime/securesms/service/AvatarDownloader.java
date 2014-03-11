@@ -7,7 +7,6 @@ import android.util.Log;
 
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.GroupDatabase;
-import org.thoughtcrime.securesms.database.PartDatabase;
 import org.thoughtcrime.securesms.push.PushServiceSocketFactory;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.recipients.RecipientFactory;

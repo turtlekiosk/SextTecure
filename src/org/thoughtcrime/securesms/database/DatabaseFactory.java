@@ -38,6 +38,7 @@ import org.whispersystems.textsecure.util.Util;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 
 import ws.com.google.android.mms.ContentType;
 
@@ -54,13 +55,13 @@ public class DatabaseFactory {
   private static final int INTRODUCED_PUSH_DATABASE_VERSION = 10;
   private static final int INTRODUCED_GROUP_DATABASE_VERSION = 11;
   private static final int INTRODUCED_PUSH_FIX_VERSION       = 12;
-  private static final int DATABASE_VERSION                  = 12;
+  private static final int INTRODUCED_THUMBNAILS_VERSION     = 13;
+  private static final int DATABASE_VERSION                  = 13;
 
   private static final String DATABASE_NAME    = "messages.db";
   private static final Object lock             = new Object();
 
   private static DatabaseFactory instance;
-  private static EncryptingPartDatabase encryptingPartInstance;
 
   private DatabaseHelper databaseHelper;
 
@@ -112,17 +113,6 @@ public class DatabaseFactory {
 
   public static PartDatabase getPartDatabase(Context context) {
     return getInstance(context).part;
-  }
-
-  public static EncryptingPartDatabase getEncryptingPartDatabase(Context context, MasterSecret masterSecret) {
-    synchronized (lock)  {
-      if (encryptingPartInstance == null) {
-        DatabaseFactory factory = getInstance(context);
-        encryptingPartInstance  = new EncryptingPartDatabase(context, factory.databaseHelper, masterSecret);
-      }
-
-      return encryptingPartInstance;
-    }
   }
 
   public static MmsAddressDatabase getMmsAddressDatabase(Context context) {
@@ -357,7 +347,7 @@ public class DatabaseFactory {
               boolean encrypted   = partCursor.getInt(partCursor.getColumnIndexOrThrow("encrypted")) == 1;
               File dataFile       = new File(dataLocation);
 
-              FileInputStream fin;
+              InputStream fin;
 
               if (encrypted) fin = new DecryptingPartInputStream(dataFile, masterSecret);
               else           fin = new FileInputStream(dataFile);
@@ -657,6 +647,11 @@ public class DatabaseFactory {
         db.execSQL("CREATE TABLE push (_id INTEGER PRIMARY KEY, type INTEGER, source TEXT, body TEXT, timestamp INTEGER, device_id INTEGER DEFAULT 1);");
         db.execSQL("INSERT INTO push (_id, type, source, body, timestamp, device_id) SELECT _id, type, source, body, timestamp, device_id FROM push_backup;");
         db.execSQL("DROP TABLE push_backup;");
+      }
+
+      if (oldVersion < INTRODUCED_THUMBNAILS_VERSION) {
+        db.execSQL("ALTER TABLE part ADD COLUMN _thumbnail TEXT");
+        db.execSQL("ALTER TABLE part ADD COLUMN data_size INTEGER");
       }
 
       db.setTransactionSuccessful();
