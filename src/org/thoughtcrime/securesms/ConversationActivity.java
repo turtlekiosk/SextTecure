@@ -23,6 +23,7 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.net.Uri;
@@ -35,7 +36,9 @@ import android.text.Editable;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.text.TextWatcher;
+import android.util.DisplayMetrics;
 import android.util.Log;
+import android.util.TypedValue;
 import android.view.ContextThemeWrapper;
 import android.view.KeyEvent;
 import android.view.Menu;
@@ -45,9 +48,13 @@ import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.View.OnFocusChangeListener;
 import android.view.View.OnKeyListener;
+import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.widget.ImageButton;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -55,6 +62,7 @@ import com.google.protobuf.ByteString;
 
 import org.thoughtcrime.securesms.components.EmojiDrawer;
 import org.thoughtcrime.securesms.components.EmojiToggle;
+import org.thoughtcrime.securesms.components.QuickCamera;
 import org.thoughtcrime.securesms.components.SendButton;
 import org.thoughtcrime.securesms.contacts.ContactAccessor;
 import org.thoughtcrime.securesms.contacts.ContactAccessor.ContactData;
@@ -156,6 +164,11 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
   private BroadcastReceiver             groupUpdateReceiver;
   private EmojiDrawer                   emojiDrawer;
   private EmojiToggle                   emojiToggle;
+  private FrameLayout                   mediaContainer;
+  private FrameLayout                   mediaCaptureControl;
+  private QuickCamera                   quickCamera;
+  private ImageButton                   quickMediaButton;
+  private View                          bottomPanel;
 
   private Recipients recipients;
   private long       threadId;
@@ -217,6 +230,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     initializeIme();
     initializeCharactersLeftViewEnabledCheck();
     calculateCharactersRemaining();
+    adjustQuickMediaOffset();
 
     MessageNotifier.setVisibleThread(threadId);
     markThreadAsRead();
@@ -227,6 +241,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     super.onPause();
     MessageNotifier.setVisibleThread(-1L);
     if (isFinishing()) overridePendingTransition(R.anim.fade_scale_in, R.anim.slide_to_right);
+    quickCamera.stopPreview();
   }
 
   @Override
@@ -735,6 +750,10 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     charactersLeft = (TextView) findViewById(R.id.space_left);
     emojiDrawer    = (EmojiDrawer) findViewById(R.id.emoji_drawer);
     emojiToggle    = (EmojiToggle) findViewById(R.id.emoji_toggle);
+    mediaContainer = (FrameLayout) findViewById(R.id.media_container);
+    mediaCaptureControl = (FrameLayout) findViewById(R.id.media_capture_controls);
+    quickMediaButton = (ImageButton) findViewById(R.id.quick_media_button);
+    bottomPanel = findViewById(R.id.bottom_panel);
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
       emojiToggle.setVisibility(View.GONE);
@@ -756,6 +775,25 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     composeText.setOnFocusChangeListener(composeKeyPressedListener);
     emojiDrawer.setComposeEditText(composeText);
     emojiToggle.setOnClickListener(new EmojiToggleListener());
+    quickCamera = new QuickCamera(this);
+    mediaContainer.addView(quickCamera);
+    quickMediaButton.setOnClickListener(new QuickMediaButtonListener());
+  }
+
+  private void adjustQuickMediaOffset() {
+      DisplayMetrics displaymetrics = new DisplayMetrics();
+      getWindowManager().getDefaultDisplay().getMetrics(displaymetrics);
+      int pixelOffset = (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP,
+              getResources().getDimensionPixelOffset(R.dimen.media_preview_height),
+              getResources().getDisplayMetrics());
+      int newOffset;
+      if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT)
+            newOffset = (displaymetrics.widthPixels - pixelOffset)/2;
+      else
+          newOffset = (displaymetrics.heightPixels - pixelOffset)/2;
+      LinearLayout.LayoutParams layoutParams = (LinearLayout.LayoutParams) mediaCaptureControl.getLayoutParams();
+      layoutParams.setMargins(0, newOffset, 0, 0);
+      mediaCaptureControl.setLayoutParams(layoutParams);
   }
 
   private void initializeResources() {
@@ -1144,6 +1182,22 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
         emojiDrawer.show();
       }
     }
+  }
+
+  private class QuickMediaButtonListener implements OnClickListener {
+      @Override
+      public void onClick(View v) {
+          if (mediaCaptureControl.getVisibility() == View.GONE) {
+              mediaCaptureControl.setVisibility(View.VISIBLE);
+              mediaContainer.setVisibility(View.VISIBLE);
+              adjustQuickMediaOffset();
+              quickCamera.startPreview();
+          } else {
+              mediaCaptureControl.setVisibility(View.GONE);
+              mediaContainer.setVisibility(View.INVISIBLE);
+              quickCamera.stopPreview();
+          }
+      }
   }
 
   private class SendButtonListener implements OnClickListener, TextView.OnEditorActionListener {
