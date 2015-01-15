@@ -18,4 +18,5 @@
 
     <integer name="media_overview_cols">3</integer>
     <dimen name="message_details_table_row_pad">10dp</dimen>
+    <dimen name="media_preview_height">200dp</dimen>
 </resources>
