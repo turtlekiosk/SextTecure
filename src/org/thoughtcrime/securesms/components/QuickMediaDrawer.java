@@ -189,6 +189,12 @@ public class QuickMediaDrawer extends LinearLayout implements GestureDetector.On
 
     @Override
     public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
+        //int newPadding = (int) (getPaddingTop() - distanceY);
+        //setPadding(0, newPadding, 0, 0);
+        if (callback != null) {
+            callback.onScroll(distanceY);
+            return true;
+        }
         return false;
     }
 
@@ -215,6 +221,7 @@ public class QuickMediaDrawer extends LinearLayout implements GestureDetector.On
     public interface Callback {
         public void onImageCapture(Uri imageUri);
         public void onSetFullScreen(boolean fullscreen);
+        public void onScroll(float distanceY);
     }
 
     public void show() {

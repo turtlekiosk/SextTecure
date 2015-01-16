@@ -175,6 +175,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
   private boolean    isEncryptedConversation;
   private boolean    isMmsEnabled = true;
   private boolean    isCharactersLeftViewEnabled;
+  private float      baseY;
 
   private CharacterCalculator characterCalculator = new CharacterCalculator();
   private DynamicTheme        dynamicTheme        = new DynamicTheme();
@@ -776,6 +777,8 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     quickMediaDrawer.setCameraContainer(mediaContainer);
     quickMediaDrawer.setCallback(this);
     quickMediaButton.setOnClickListener(new QuickMediaListener());
+
+    baseY = layoutContainer.getHeight() - quickMediaDrawer.getHeight();
   }
 
   private void initializeResources() {
@@ -1190,6 +1193,16 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
         }
     }
 
+    @Override
+    public void onScroll(float distanceY) {
+        float startY = layoutContainer.getY();
+        float newY = startY - distanceY;
+        if (newY <= baseY) {
+            layoutContainer.setY(newY);
+            layoutContainer.requestLayout();
+        }
+    }
+
 
     // Listeners
 
@@ -1219,10 +1232,11 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
   private class QuickMediaListener implements OnClickListener {
     @Override
     public void onClick(View v) {
-      if (quickMediaDrawer.isShown())
-        quickMediaDrawer.hide();
-      else
+      if (quickMediaDrawer.isShown()) {
+          quickMediaDrawer.hide();
+      } else {
         quickMediaDrawer.show();
+      }
     }
   }
 
