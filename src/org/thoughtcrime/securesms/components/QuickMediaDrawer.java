@@ -5,10 +5,13 @@ import android.content.res.Configuration;
 import android.hardware.Camera;
 import android.net.Uri;
 import android.os.Environment;
+import android.support.v4.view.GestureDetectorCompat;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.TypedValue;
+import android.view.GestureDetector;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -25,7 +28,7 @@ import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
-public class QuickMediaDrawer extends LinearLayout {
+public class QuickMediaDrawer extends LinearLayout implements GestureDetector.OnGestureListener {
     private final Context context;
     private ImageButton cameraButton, audioButton;
     private FrameLayout controlContainer, cameraContainer;
@@ -33,6 +36,7 @@ public class QuickMediaDrawer extends LinearLayout {
     private View buttonBar, cameraControls;
     private boolean fullscreen = false;
     private Callback callback;
+    private GestureDetectorCompat mDetector;
 
     public QuickMediaDrawer(Context context) {
         this(context, null);
@@ -60,6 +64,14 @@ public class QuickMediaDrawer extends LinearLayout {
                     controlContainer.setVisibility(View.VISIBLE);
                     adjustQuickMediaOffset();
                 }
+            }
+        });
+        mDetector = new GestureDetectorCompat(context,this);
+        setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                mDetector.onTouchEvent(event);
+                return true;
             }
         });
     }
@@ -111,6 +123,7 @@ public class QuickMediaDrawer extends LinearLayout {
     }
 
     private void setFullscreenCapture(boolean fullscreen) {
+        this.fullscreen = fullscreen;
         if (callback != null) callback.onSetFullScreen(fullscreen);
         if (fullscreen) {
             LinearLayout.LayoutParams layoutParams = (LinearLayout.LayoutParams) controlContainer.getLayoutParams();
@@ -131,12 +144,12 @@ public class QuickMediaDrawer extends LinearLayout {
                 takePicture();
             }
         });
-        ImageButton fullscreenCaptureButton = (ImageButton) cameraControls.findViewById(R.id.fullscreen_button);
+        final ImageButton fullscreenCaptureButton = (ImageButton) cameraControls.findViewById(R.id.fullscreen_button);
         fullscreenCaptureButton.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
                 setFullscreenCapture(!fullscreen);
-                fullscreen = !fullscreen;
+                fullscreenCaptureButton.setImageResource(fullscreen ? R.drawable.quick_camera_exit_fullscreen : R.drawable.quick_camera_fullscreen);
             }
         });
         final ImageButton swapCameraButton = (ImageButton) cameraControls.findViewById(R.id.swap_camera_button);
@@ -157,6 +170,46 @@ public class QuickMediaDrawer extends LinearLayout {
         if (quickCamera != null) {
             quickCamera.takePicture(callback);
         }
+    }
+
+    @Override
+    public boolean onDown(MotionEvent e) {
+        return true;
+    }
+
+    @Override
+    public void onShowPress(MotionEvent e) {
+
+    }
+
+    @Override
+    public boolean onSingleTapUp(MotionEvent e) {
+        return false;
+    }
+
+    @Override
+    public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
+        return false;
+    }
+
+    @Override
+    public void onLongPress(MotionEvent e) {
+
+    }
+
+    @Override
+    public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
+        if (velocityY > 3) {
+            if (fullscreen)
+                setFullscreenCapture(false);
+            else
+                hide();
+            return true;
+        } else if (velocityY < -3) {
+            setFullscreenCapture(true);
+            return true;
+        }
+        return false;
     }
 
     public interface Callback {

@@ -8,7 +8,7 @@
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
         android:layout_centerHorizontal="true"
-        android:background="#00000000"
+        android:background="@drawable/quick_camera_shutter_ring"
         android:src="@drawable/quick_shutter_button"
         android:padding="20dp"/>
     <ImageButton
