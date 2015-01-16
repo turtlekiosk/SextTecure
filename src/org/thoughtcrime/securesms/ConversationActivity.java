@@ -47,6 +47,7 @@ import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.View.OnFocusChangeListener;
 import android.view.View.OnKeyListener;
+import android.view.Window;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
@@ -181,7 +182,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     dynamicTheme.onCreate(this);
     dynamicLanguage.onCreate(this);
     super.onCreate(state);
-
+    getWindow().requestFeature(Window.FEATURE_ACTION_BAR_OVERLAY);
     setContentView(R.layout.conversation_activity);
     getSupportActionBar().setDisplayHomeAsUpEnabled(true);
 
@@ -1197,6 +1198,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
             } else {
                 layoutContainer.setVisibility(View.GONE);
             }
+            getSupportActionBar().hide();
         } else {
             getSupportActionBar().show();
             layoutContainer.setVisibility(View.VISIBLE);
