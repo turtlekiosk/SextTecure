@@ -16,6 +16,8 @@
  */
 package org.thoughtcrime.securesms;
 
+import android.animation.Animator;
+import android.animation.ObjectAnimator;
 import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
@@ -50,6 +52,7 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
+import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -160,7 +163,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
   private FrameLayout                   mediaContainer;
   private ImageButton                   quickMediaButton;
   private QuickMediaDrawer              quickMediaDrawer;
-  private View                          layoutContainer;
+  private RelativeLayout layoutContainer;
 
   private Recipients recipients;
   private long       threadId;
@@ -748,7 +751,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     mediaContainer = (FrameLayout) findViewById(R.id.media_container);
     quickMediaButton = (ImageButton) findViewById(R.id.quick_media_button);
     quickMediaDrawer = (QuickMediaDrawer) findViewById(R.id.quick_media_drawer);
-    layoutContainer = findViewById(R.id.layout_container);
+    layoutContainer = (RelativeLayout) findViewById(R.id.layout_container);
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
       emojiToggle.setVisibility(View.GONE);
@@ -1163,14 +1166,45 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     }
 
     @Override
-    public void onSetFullScreen(boolean fullscreen) {
-        layoutContainer.setVisibility(fullscreen ? View.GONE : View.VISIBLE);
+    public void onSetFullScreen(final boolean fullscreen) {
         if (fullscreen) {
-            getSupportActionBar().hide();
+            //getSupportActionBar().hide();
+            if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
+                ObjectAnimator slideupAnimator = ObjectAnimator.ofFloat(layoutContainer, "translationY", -layoutContainer.getHeight());
+                slideupAnimator.setDuration(200);
+                slideupAnimator.addListener(new Animator.AnimatorListener() {
+                    @Override
+                    public void onAnimationStart(Animator animation) {
 
-        }
-        else {
+                    }
+
+                    @Override
+                    public void onAnimationEnd(Animator animation) {
+                        layoutContainer.setVisibility(View.GONE);
+                    }
+
+                    @Override
+                    public void onAnimationCancel(Animator animation) {
+
+                    }
+
+                    @Override
+                    public void onAnimationRepeat(Animator animation) {
+
+                    }
+                });
+                slideupAnimator.start();
+            } else {
+                layoutContainer.setVisibility(View.GONE);
+            }
+        } else {
             getSupportActionBar().show();
+            layoutContainer.setVisibility(View.VISIBLE);
+            if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
+                ObjectAnimator slidedownAnimator = ObjectAnimator.ofFloat(layoutContainer, "translationY", 0);
+                slidedownAnimator.setDuration(200);
+                slidedownAnimator.start();
+            }
         }
     }
 
