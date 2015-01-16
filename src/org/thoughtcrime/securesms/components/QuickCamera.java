@@ -4,30 +4,38 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.hardware.Camera;
+import android.net.Uri;
+import android.os.Environment;
 import android.util.DisplayMetrics;
+import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.ViewGroup;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
 
 public class QuickCamera extends SurfaceView implements SurfaceHolder.Callback {
+    public static final int MEDIA_TYPE_IMAGE = 1;
+    public static final int MEDIA_TYPE_VIDEO = 2;
     private SurfaceHolder surfaceHolder;
     private Camera camera;
-    private Activity activity;
+    private Context context;
     private boolean running;
+    private final String TAG = "QuickCamera";
 
-    public QuickCamera(Activity activity) {
-        super(activity);
-        this.activity = activity;
-        DisplayMetrics displaymetrics = new DisplayMetrics();
-        activity.getWindowManager().getDefaultDisplay().getMetrics(displaymetrics);
-        int width = displaymetrics.widthPixels;
-        int height = displaymetrics.heightPixels;
+    public QuickCamera(Context context) {
+        super(context);
+        this.context = context;
+        DisplayMetrics displayMetrics = getResources().getDisplayMetrics();
+        int width = displayMetrics.widthPixels;
+        int height = displayMetrics.heightPixels;
         ViewGroup.LayoutParams layoutParams = new ViewGroup.LayoutParams(width, height);
-        /*layoutParams.height = ViewGroup.LayoutParams.MATCH_PARENT;
-        layoutParams.width = ViewGroup.LayoutParams.WRAP_CONTENT;*/
         setLayoutParams(layoutParams);
         surfaceHolder = getHolder();
         surfaceHolder.addCallback(this);
@@ -140,21 +148,81 @@ public class QuickCamera extends SurfaceView implements SurfaceHolder.Callback {
         }
     }
 
+    public void takePicture(final QuickMediaDrawer.Callback callback) {
+        if (camera != null) {
+            camera.takePicture(null, null, new Camera.PictureCallback() {
+                @Override
+                public void onPictureTaken(byte[] data, Camera camera) {
+                    File pictureFile = getOutputMediaFile(MEDIA_TYPE_IMAGE);
+                    if (pictureFile == null){
+                        return;
+                    }
+
+                    try {
+                        FileOutputStream fos = new FileOutputStream(pictureFile);
+                        fos.write(data);
+                        fos.close();
+                    } catch (FileNotFoundException e) {
+                        Log.d(TAG, "File not found: " + e.getMessage());
+                    } catch (IOException e) {
+                        Log.d(TAG, "Error accessing file: " + e.getMessage());
+                    }
+                    callback.onImageCapture(getOutputMediaFileUri(MEDIA_TYPE_IMAGE));
+                }
+            });
+        }
+    }
+
     public void setupPreview() {
         try {
             camera.setPreviewDisplay(surfaceHolder);
             int rotation = (getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT ? 90 : 0);
             camera.setDisplayOrientation(rotation);
             Camera.Parameters parameters = camera.getParameters();
-            DisplayMetrics displaymetrics = new DisplayMetrics();
-            activity.getWindowManager().getDefaultDisplay().getMetrics(displaymetrics);
-            int width = displaymetrics.widthPixels;
-            int height = displaymetrics.heightPixels;
             Camera.Size previewSize = getOptimalPreviewSize(parameters.getSupportedPreviewSizes(), getWidth(), getHeight());
             parameters.setPreviewSize(previewSize.width, previewSize.height);
             camera.setParameters(parameters);
         } catch (Exception e) {
             //TODO: explain in view that camera preview is unavailable
         }
+    }
+
+    /** Create a file Uri for saving an image or video */
+    private static Uri getOutputMediaFileUri(int type){
+        return Uri.fromFile(getOutputMediaFile(type));
+    }
+
+    /** Create a File for saving an image or video */
+    private static File getOutputMediaFile(int type){
+        // To be safe, you should check that the SDCard is mounted
+        // using Environment.getExternalStorageState() before doing this.
+
+        File mediaStorageDir = new File(Environment.getExternalStoragePublicDirectory(
+                Environment.DIRECTORY_PICTURES), "ts_file");
+        // This location works best if you want the created images to be shared
+        // between applications and persist after your app has been uninstalled.
+
+        // Create the storage directory if it does not exist
+        if (! mediaStorageDir.exists()){
+            if (! mediaStorageDir.mkdirs()){
+                Log.d("ts_file", "failed to create directory");
+                return null;
+            }
+        }
+
+        // Create a media file name
+        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
+        File mediaFile;
+        if (type == MEDIA_TYPE_IMAGE){
+            mediaFile = new File(mediaStorageDir.getPath() + File.separator +
+                    "IMG_"+ timeStamp + ".jpg");
+        } else if(type == MEDIA_TYPE_VIDEO) {
+            mediaFile = new File(mediaStorageDir.getPath() + File.separator +
+                    "VID_"+ timeStamp + ".mp4");
+        } else {
+            return null;
+        }
+
+        return mediaFile;
     }
 }
