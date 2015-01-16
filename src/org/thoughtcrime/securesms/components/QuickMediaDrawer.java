@@ -13,6 +13,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 
 import org.thoughtcrime.securesms.R;
@@ -138,6 +139,17 @@ public class QuickMediaDrawer extends LinearLayout {
                 fullscreen = !fullscreen;
             }
         });
+        final ImageButton swapCameraButton = (ImageButton) cameraControls.findViewById(R.id.swap_camera_button);
+        if (quickCamera.isMultipleCameras()) {
+            swapCameraButton.setVisibility(View.VISIBLE);
+            swapCameraButton.setOnClickListener(new OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    quickCamera.swapCamera();
+                    swapCameraButton.setImageResource(quickCamera.isBackCamera() ? R.drawable.quick_camera_front : R.drawable.quick_camera_rear);
+                }
+            });
+        }
     }
 
     private void takePicture() {

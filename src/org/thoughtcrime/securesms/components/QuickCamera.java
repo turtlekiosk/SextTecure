@@ -8,6 +8,7 @@ import android.net.Uri;
 import android.os.Environment;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.ViewGroup;
@@ -28,6 +29,7 @@ public class QuickCamera extends SurfaceView implements SurfaceHolder.Callback {
     private Context context;
     private boolean running;
     private final String TAG = "QuickCamera";
+    private int cameraId = Camera.CameraInfo.CAMERA_FACING_BACK;
 
     public QuickCamera(Context context) {
         super(context);
@@ -41,19 +43,45 @@ public class QuickCamera extends SurfaceView implements SurfaceHolder.Callback {
         surfaceHolder.addCallback(this);
         surfaceHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
         running = false;
-        camera = getCameraInstance();
+        camera = getCameraInstance(cameraId);
     }
 
-    public static Camera getCameraInstance(){
+    public static Camera getCameraInstance(int cameraId){
         Camera c = null;
         try {
-            c = Camera.open();
+            c = Camera.open(cameraId);
         }
         catch (Exception e){
             //TODO: explain in view that camera is unavailable
         }
         return c;
     }
+
+    public void setCameraDisplayOrientation(Activity activity,
+                                                   int cameraId, android.hardware.Camera camera) {
+        android.hardware.Camera.CameraInfo info =
+                new android.hardware.Camera.CameraInfo();
+        android.hardware.Camera.getCameraInfo(cameraId, info);
+
+        int rotation = getResources().getConfiguration().orientation;
+        int degrees = 0;
+        switch (rotation) {
+            case Surface.ROTATION_0: degrees = 0; break;
+            case Surface.ROTATION_90: degrees = 90; break;
+            case Surface.ROTATION_180: degrees = 180; break;
+            case Surface.ROTATION_270: degrees = 270; break;
+        }
+
+        int result;
+        if (info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) {
+            result = (info.orientation + degrees) % 360;
+            result = (360 - result) % 360;  // compensate the mirror
+        } else {  // back-facing
+            result = (info.orientation - degrees + 360) % 360;
+        }
+        camera.setDisplayOrientation(result);
+    }
+
 
     private Camera.Size getOptimalPreviewSize(List<Camera.Size> sizes, int width, int height) {
         final double ASPECT_TOLERANCE = 0.1;
@@ -90,7 +118,7 @@ public class QuickCamera extends SurfaceView implements SurfaceHolder.Callback {
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
         if (camera == null)
-            camera = getCameraInstance();
+            camera = getCameraInstance(cameraId);
 
         try {
             camera.setPreviewDisplay(holder);
@@ -134,7 +162,7 @@ public class QuickCamera extends SurfaceView implements SurfaceHolder.Callback {
 
     public void startPreview() {
         running = true;
-        if (camera == null) camera = getCameraInstance();
+        if (camera == null) camera = getCameraInstance(cameraId);
         setupPreview();
         camera.startPreview();
     }
@@ -224,5 +252,21 @@ public class QuickCamera extends SurfaceView implements SurfaceHolder.Callback {
         }
 
         return mediaFile;
+    }
+
+    public boolean isMultipleCameras() {
+        return Camera.getNumberOfCameras() > 1;
+    }
+
+    public void swapCamera() {
+        if (isMultipleCameras()) {
+            cameraId = (cameraId == Camera.CameraInfo.CAMERA_FACING_BACK) ? Camera.CameraInfo.CAMERA_FACING_FRONT : Camera.CameraInfo.CAMERA_FACING_BACK;
+            stopPreview();
+            startPreview();
+        }
+    }
+
+    public boolean isBackCamera() {
+        return cameraId == Camera.CameraInfo.CAMERA_FACING_BACK;
     }
 }
