@@ -16,8 +16,6 @@
  */
 package org.thoughtcrime.securesms;
 
-import android.animation.Animator;
-import android.animation.ObjectAnimator;
 import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
@@ -58,6 +56,8 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.protobuf.ByteString;
+import com.nineoldandroids.animation.Animator;
+import com.nineoldandroids.animation.ObjectAnimator;
 
 import org.thoughtcrime.securesms.TransportOptions.OnTransportChangedListener;
 import org.thoughtcrime.securesms.components.EmojiDrawer;
@@ -1176,44 +1176,38 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     @Override
     public void onSetFullScreen(final boolean fullscreen) {
         if (fullscreen) {
-            if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
-                ObjectAnimator slideupAnimator = ObjectAnimator.ofFloat(layoutContainer, "translationY", -layoutContainer.getHeight());
-                slideupAnimator.setDuration(200);
-                slideupAnimator.addListener(new Animator.AnimatorListener() {
-                    @Override
-                    public void onAnimationStart(Animator animation) {
+            ObjectAnimator slideupAnimator = ObjectAnimator.ofFloat(layoutContainer, "translationY", -layoutContainer.getHeight());
+            slideupAnimator.setDuration(200);
+            slideupAnimator.addListener(new Animator.AnimatorListener() {
+                @Override
+                public void onAnimationStart(Animator animation) {
 
-                    }
+                }
 
-                    @Override
-                    public void onAnimationEnd(Animator animation) {
-                        layoutContainer.setVisibility(View.GONE);
-                    }
+                @Override
+                public void onAnimationEnd(Animator animation) {
+                    layoutContainer.setVisibility(View.GONE);
+                }
 
-                    @Override
-                    public void onAnimationCancel(Animator animation) {
+                @Override
+                public void onAnimationCancel(Animator animation) {
 
-                    }
+                }
 
-                    @Override
-                    public void onAnimationRepeat(Animator animation) {
+                @Override
+                public void onAnimationRepeat(Animator animation) {
 
-                    }
-                });
-                slideupAnimator.start();
-            } else {
-                layoutContainer.setVisibility(View.GONE);
-            }
+                }
+            });
+            slideupAnimator.start();
             getSupportActionBar().hide();
         } else {
             getSupportActionBar().show();
             layoutContainer.setVisibility(View.VISIBLE);
-            if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
-                float newY = baseY - getResources().getDimension(R.dimen.media_preview_height);
-                ObjectAnimator slidedownAnimator = ObjectAnimator.ofFloat(layoutContainer, "translationY", newY);
-                slidedownAnimator.setDuration(200);
-                slidedownAnimator.start();
-            }
+            float newY = baseY - getResources().getDimension(R.dimen.media_preview_height);
+            ObjectAnimator slidedownAnimator = ObjectAnimator.ofFloat(layoutContainer, "translationY", newY);
+            slidedownAnimator.setDuration(200);
+            slidedownAnimator.start();
         }
     }
 
@@ -1229,20 +1223,54 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
 
     @Override
     public void onShow() {
-        if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
-            ObjectAnimator slideupAnimator = ObjectAnimator.ofFloat(layoutContainer, "translationY", -getResources().getDimension(R.dimen.media_preview_height));
-            slideupAnimator.setDuration(200);
-            slideupAnimator.start();
-        }
+        ObjectAnimator slideupAnimator = ObjectAnimator.ofFloat(layoutContainer, "translationY", baseY - getResources().getDimension(R.dimen.media_preview_height));
+        slideupAnimator.setDuration(200);
+        slideupAnimator.addListener(new Animator.AnimatorListener() {
+            @Override
+            public void onAnimationStart(Animator animation) {
+                quickMediaPreview.switchCamera();
+                quickMediaPreview.setVisibility(View.VISIBLE);
+            }
+
+            @Override
+            public void onAnimationEnd(Animator animation) {
+            }
+
+            @Override
+            public void onAnimationCancel(Animator animation) {
+            }
+
+            @Override
+            public void onAnimationRepeat(Animator animation) {
+            }
+        });
+        slideupAnimator.start();
     }
 
     @Override
     public void onHide() {
-        if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
-            ObjectAnimator slidedownAnimator = ObjectAnimator.ofFloat(layoutContainer, "translationY", baseY);
-            slidedownAnimator.setDuration(200);
-            slidedownAnimator.start();
-        }
+        ObjectAnimator slidedownAnimator = ObjectAnimator.ofFloat(layoutContainer, "translationY", baseY);
+        slidedownAnimator.setDuration(200);
+        slidedownAnimator.addListener(new Animator.AnimatorListener() {
+            @Override
+            public void onAnimationStart(Animator animation) {
+            }
+
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                quickMediaPreview.setVisibility(View.GONE);
+                quickMediaPreview.stop();
+            }
+
+            @Override
+            public void onAnimationCancel(Animator animation) {
+            }
+
+            @Override
+            public void onAnimationRepeat(Animator animation) {
+            }
+        });
+        slidedownAnimator.start();
     }
 
     @Override
