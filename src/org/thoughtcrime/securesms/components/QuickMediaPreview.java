@@ -192,16 +192,12 @@ public class QuickMediaPreview extends FrameLayout implements GestureDetector.On
 
     public void show() {
         if (callback != null) callback.onShow();
-        switchCamera();
         InputMethodManager imm = (InputMethodManager) context.getSystemService(Context.INPUT_METHOD_SERVICE);
         imm.hideSoftInputFromWindow(getWindowToken(), 0);
-        setVisibility(View.VISIBLE);
     }
 
     public void hide() {
         if (callback != null) callback.onHide();
-        stop();
-        setVisibility(View.GONE);
     }
 
     public boolean isShown() {
