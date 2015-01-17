@@ -50,6 +50,8 @@
     <attr name="conversation_item_sent_push_pending_background" format="reference" />
     <attr name="conversation_item_sent_push_pending_triangle_background" format="reference" />
 
+    <attr name="quick_camera_icon" format="reference"/>
+
     <attr name="contact_selection_push_user" format="reference|color" />
     <attr name="contact_selection_lay_user" format="reference|color" />
     <attr name="contact_selection_label_text" format="reference|color" />

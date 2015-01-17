@@ -1,13 +1,10 @@
 package org.thoughtcrime.securesms.components;
 
 import android.content.Context;
-import android.content.res.Configuration;
 import android.net.Uri;
 import android.os.Build;
 import android.support.v4.view.GestureDetectorCompat;
 import android.util.AttributeSet;
-import android.util.DisplayMetrics;
-import android.util.TypedValue;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.View;
@@ -29,6 +26,7 @@ public class QuickMediaPreview extends FrameLayout implements
     private GestureDetectorCompat mDetector;
     private ImageButton fullScreenButton;
     private int newOffset;
+    private boolean landscape = false;
 
     public QuickMediaPreview(Context context) {
         this(context, null);
@@ -56,11 +54,13 @@ public class QuickMediaPreview extends FrameLayout implements
             quickCamera.stopPreview();
     }
 
-    private void adjustQuickMediaOffset(float position) {
-        if (quickCamera != null) {
-            ObjectAnimator slideAnimator = ObjectAnimator.ofFloat(quickCamera, "translationY", position);
-            slideAnimator.setDuration(0);
-            slideAnimator.start();
+    public void setLandscape(boolean landscape) {
+        this.landscape = landscape;
+        if (fullScreenButton != null) {
+            if (landscape)
+                fullScreenButton.setImageResource(R.drawable.quick_camera_hide);
+            else
+                fullScreenButton.setImageResource(R.drawable.quick_camera_fullscreen);
         }
     }
 
@@ -75,11 +75,15 @@ public class QuickMediaPreview extends FrameLayout implements
     private void setFullscreenCapture(boolean fullscreen) {
         this.fullscreen = fullscreen;
         if (callback != null) callback.onSetFullScreen(fullscreen);
-        if (fullscreen) {
+        if (fullscreen || landscape) {
             if (quickCamera != null) {
                 adjustQuickMediaOffsetWithDelay(0f);
                 if (fullScreenButton != null)
-                    fullScreenButton.setImageResource(R.drawable.quick_camera_exit_fullscreen);
+                    if (landscape)
+                        fullScreenButton.setImageResource(R.drawable.quick_camera_hide);
+                    else
+                        fullScreenButton.setImageResource(R.drawable.quick_camera_exit_fullscreen);
+
             }
         } else {
             newOffset = (getHeight() - getResources().getDimensionPixelOffset(R.dimen.media_preview_height)) / 2;
@@ -106,7 +110,10 @@ public class QuickMediaPreview extends FrameLayout implements
         fullscreenCaptureButton.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
-                setFullscreenCapture(!fullscreen);
+                if (landscape)
+                    hide();
+                else
+                    setFullscreenCapture(!fullscreen);
             }
         });
         final ImageButton swapCameraButton = (ImageButton) cameraControls.findViewById(R.id.swap_camera_button);
@@ -169,7 +176,7 @@ public class QuickMediaPreview extends FrameLayout implements
     @Override
     public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
         if (velocityY > 1) {
-            if (fullscreen) {
+            if (fullscreen && !landscape) {
                 setFullscreenCapture(false);
             } else {
                 hide();
@@ -193,9 +200,9 @@ public class QuickMediaPreview extends FrameLayout implements
         public void onDragRelease(float distanceY);
     }
 
-    public void show(boolean fullscreen) {
+    public void show() {
         if (callback != null) callback.onShow();
-        setFullscreenCapture(fullscreen);
+        setFullscreenCapture(landscape);
         InputMethodManager imm = (InputMethodManager) context.getSystemService(Context.INPUT_METHOD_SERVICE);
         imm.hideSoftInputFromWindow(getWindowToken(), 0);
     }
