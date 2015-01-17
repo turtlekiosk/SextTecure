@@ -3,6 +3,7 @@ package org.thoughtcrime.securesms.components;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.net.Uri;
+import android.os.Build;
 import android.support.v4.view.GestureDetectorCompat;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
@@ -55,11 +56,18 @@ public class QuickMediaPreview extends FrameLayout implements
             quickCamera.stopPreview();
     }
 
-    private void adjustQuickMediaOffset() {
+    private void adjustQuickMediaOffset(float position) {
         if (quickCamera != null) {
-            newOffset = (getHeight() - getResources().getDimensionPixelOffset(R.dimen.media_preview_height)) / 2;
-            ObjectAnimator slideAnimator = ObjectAnimator.ofFloat(quickCamera, "translationY", newOffset);
+            ObjectAnimator slideAnimator = ObjectAnimator.ofFloat(quickCamera, "translationY", position);
             slideAnimator.setDuration(0);
+            slideAnimator.start();
+        }
+    }
+
+    private void adjustQuickMediaOffsetWithDelay(float position) {
+        if (quickCamera != null) {
+            ObjectAnimator slideAnimator = ObjectAnimator.ofFloat(quickCamera, "translationY", position);
+            slideAnimator.setDuration(200);
             slideAnimator.start();
         }
     }
@@ -69,26 +77,23 @@ public class QuickMediaPreview extends FrameLayout implements
         if (callback != null) callback.onSetFullScreen(fullscreen);
         if (fullscreen) {
             if (quickCamera != null) {
-                ObjectAnimator slideAnimator = ObjectAnimator.ofFloat(quickCamera, "translationY", 0);
-                slideAnimator.setDuration(0);
-                slideAnimator.start();
-                quickCamera.requestLayout();
+                adjustQuickMediaOffsetWithDelay(0f);
                 if (fullScreenButton != null)
                     fullScreenButton.setImageResource(R.drawable.quick_camera_exit_fullscreen);
             }
         } else {
-            adjustQuickMediaOffset();
+            newOffset = (getHeight() - getResources().getDimensionPixelOffset(R.dimen.media_preview_height)) / 2;
+            adjustQuickMediaOffsetWithDelay(newOffset);
             if (fullScreenButton != null)
                 fullScreenButton.setImageResource(R.drawable.quick_camera_fullscreen);
         }
     }
 
     private void initializeCameraControls() {
-        if (cameraControls == null) {
-            cameraControls = inflate(context, R.layout.quick_camera_controls, null);
-            addView(cameraControls);
-        }
-        cameraControls.bringToFront();
+        if (cameraControls != null)
+            removeView(cameraControls);
+        cameraControls = inflate(context, R.layout.quick_camera_controls, null);
+        addView(cameraControls);
         ImageButton captureButton = (ImageButton) cameraControls.findViewById(R.id.shutter_button);
         captureButton.setOnClickListener(new OnClickListener() {
             @Override
@@ -142,7 +147,15 @@ public class QuickMediaPreview extends FrameLayout implements
     @Override
     public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
         if (callback != null) {
-            callback.onScroll(distanceY);
+            callback.onScroll(e1, e2, distanceX, distanceY);
+            if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
+                if (quickCamera != null) {
+                    float startY = quickCamera.getY();
+                    float newY = startY - distanceY;
+                    if (newY >= 0)
+                        quickCamera.setY(newY);
+                }
+            }
             return true;
         }
         return false;
@@ -155,17 +168,17 @@ public class QuickMediaPreview extends FrameLayout implements
 
     @Override
     public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
-        if (velocityY > 3) {
+        if (velocityY > 1) {
             if (fullscreen) {
                 setFullscreenCapture(false);
             } else {
                 hide();
             }
             return true;
-        } else if (velocityY < -3) {
+        } else if (velocityY < -1) {
             setFullscreenCapture(true);
             return true;
-        } else if (velocityY > 0) {
+        } else {
             if (callback != null) callback.onDragRelease(velocityY);
         }
         return false;
@@ -174,7 +187,7 @@ public class QuickMediaPreview extends FrameLayout implements
     public interface Callback {
         public void onImageCapture(Uri imageUri);
         public void onSetFullScreen(boolean fullscreen);
-        public void onScroll(float distanceY);
+        public void onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY);
         public void onShow();
         public void onHide();
         public void onDragRelease(float distanceY);
@@ -216,7 +229,8 @@ public class QuickMediaPreview extends FrameLayout implements
         addView(quickCamera);
         initializeCameraControls();
         setVisibility(View.VISIBLE);
-        adjustQuickMediaOffset();
+        newOffset = (getHeight() - getResources().getDimensionPixelOffset(R.dimen.media_preview_height)) / 2;
+        adjustQuickMediaOffsetWithDelay(newOffset);
         if (quickCamera != null)
             quickCamera.startPreview();
     }

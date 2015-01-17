@@ -42,6 +42,7 @@ import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.View.OnFocusChangeListener;
@@ -1177,27 +1178,6 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
         if (fullscreen) {
             ObjectAnimator slideupAnimator = ObjectAnimator.ofFloat(layoutContainer, "translationY", -layoutContainer.getHeight());
             slideupAnimator.setDuration(200);
-            slideupAnimator.addListener(new Animator.AnimatorListener() {
-                @Override
-                public void onAnimationStart(Animator animation) {
-
-                }
-
-                @Override
-                public void onAnimationEnd(Animator animation) {
-                    layoutContainer.setVisibility(View.GONE);
-                }
-
-                @Override
-                public void onAnimationCancel(Animator animation) {
-
-                }
-
-                @Override
-                public void onAnimationRepeat(Animator animation) {
-
-                }
-            });
             slideupAnimator.start();
             getSupportActionBar().hide();
         } else {
@@ -1213,14 +1193,21 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     }
 
     @Override
-    public void onScroll(float distanceY) {
-        float startY = layoutContainer.getHeight();
-        float newY = startY - distanceY;
-        if (newY <= baseY) {
-            ObjectAnimator slideAnimator = ObjectAnimator.ofFloat(layoutContainer, "translationY", newY);
-            slideAnimator.setDuration(0);
-            slideAnimator.start();
-            layoutContainer.requestLayout();
+    public void onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
+        /*    float fixed = e1.getY() - (layoutContainer.getY() + layoutContainer.getHeight());
+            float offset = e2.getY() - fixed;
+            if (offset > 0) {
+                layoutContainer.setY(offset + layoutContainer.getHeight());
+                layoutContainer.requestLayout();
+            }
+        }*/
+        if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
+            float startY = layoutContainer.getY();
+            float newY = startY - distanceY;
+            if (newY <= baseY) {
+                layoutContainer.setY(newY);
+                layoutContainer.requestLayout();
+            }
         }
     }
 

@@ -46,7 +46,7 @@ public class QuickCamera extends SurfaceView implements SurfaceHolder.Callback {
         camera = getCameraInstance(cameraId);
     }
 
-    private Camera getCameraInstance(int cameraId){
+    private Camera getCameraInstance(int cameraId) {
         Camera c = null;
         try {
             c = Camera.open(cameraId);
