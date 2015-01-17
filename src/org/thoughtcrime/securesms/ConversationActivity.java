@@ -62,7 +62,7 @@ import com.google.protobuf.ByteString;
 import org.thoughtcrime.securesms.TransportOptions.OnTransportChangedListener;
 import org.thoughtcrime.securesms.components.EmojiDrawer;
 import org.thoughtcrime.securesms.components.EmojiToggle;
-import org.thoughtcrime.securesms.components.QuickMediaDrawer;
+import org.thoughtcrime.securesms.components.QuickMediaPreview;
 import org.thoughtcrime.securesms.components.SendButton;
 import org.thoughtcrime.securesms.contacts.ContactAccessor;
 import org.thoughtcrime.securesms.contacts.ContactAccessor.ContactData;
@@ -130,8 +130,8 @@ import static org.whispersystems.textsecure.internal.push.PushMessageProtos.Push
  */
 public class ConversationActivity extends PassphraseRequiredActionBarActivity
     implements ConversationFragment.ConversationFragmentListener,
-               AttachmentManager.AttachmentListener,RecipientModifiedListener,
-               QuickMediaDrawer.Callback
+        AttachmentManager.AttachmentListener, RecipientModifiedListener,
+        QuickMediaPreview.Callback
 {
   private static final String TAG = ConversationActivity.class.getSimpleName();
 
@@ -163,7 +163,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
   private EmojiToggle                   emojiToggle;
   private FrameLayout                   mediaContainer;
   private ImageButton                   quickMediaButton;
-  private QuickMediaDrawer              quickMediaDrawer;
+  private QuickMediaPreview quickMediaPreview;
   private RelativeLayout layoutContainer;
 
   private Recipients recipients;
@@ -228,6 +228,10 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
 
     MessageNotifier.setVisibleThread(threadId);
     markThreadAsRead();
+
+    if (quickMediaPreview != null && quickMediaPreview.isShown()) {
+        quickMediaPreview.switchCamera();
+    }
   }
 
   @Override
@@ -235,7 +239,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     super.onPause();
     MessageNotifier.setVisibleThread(-1L);
     if (isFinishing()) overridePendingTransition(R.anim.fade_scale_in, R.anim.slide_to_right);
-    quickMediaDrawer.stop();
+    quickMediaPreview.stop();
   }
 
   @Override
@@ -752,7 +756,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     emojiToggle    = (EmojiToggle) findViewById(R.id.emoji_toggle);
     mediaContainer = (FrameLayout) findViewById(R.id.media_container);
     quickMediaButton = (ImageButton) findViewById(R.id.quick_media_button);
-    quickMediaDrawer = (QuickMediaDrawer) findViewById(R.id.quick_media_drawer);
+    quickMediaPreview = (QuickMediaPreview) findViewById(R.id.quick_media_drawer);
     layoutContainer = (RelativeLayout) findViewById(R.id.layout_container);
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
@@ -782,11 +786,11 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     composeText.setOnFocusChangeListener(composeKeyPressedListener);
     emojiDrawer.setComposeEditText(composeText);
     emojiToggle.setOnClickListener(new EmojiToggleListener());
-    quickMediaDrawer.setCameraContainer(mediaContainer);
-    quickMediaDrawer.setCallback(this);
+    quickMediaPreview.setCameraContainer(mediaContainer);
+    quickMediaPreview.setCallback(this);
     quickMediaButton.setOnClickListener(new QuickMediaListener());
 
-    baseY = layoutContainer.getHeight() - quickMediaDrawer.getHeight();
+    baseY = layoutContainer.getHeight() - quickMediaPreview.getHeight();
   }
 
   private void initializeResources() {
@@ -1166,13 +1170,12 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     @Override
     public void onImageCapture(Uri imageUri) {
       addAttachmentImage(imageUri);
-      quickMediaDrawer.hide();
+      quickMediaPreview.hide();
     }
 
     @Override
     public void onSetFullScreen(final boolean fullscreen) {
         if (fullscreen) {
-            //getSupportActionBar().hide();
             if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
                 ObjectAnimator slideupAnimator = ObjectAnimator.ofFloat(layoutContainer, "translationY", -layoutContainer.getHeight());
                 slideupAnimator.setDuration(200);
@@ -1206,7 +1209,8 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
             getSupportActionBar().show();
             layoutContainer.setVisibility(View.VISIBLE);
             if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
-                ObjectAnimator slidedownAnimator = ObjectAnimator.ofFloat(layoutContainer, "translationY", 0);
+                float newY = baseY - getResources().getDimension(R.dimen.media_preview_height);
+                ObjectAnimator slidedownAnimator = ObjectAnimator.ofFloat(layoutContainer, "translationY", newY);
                 slidedownAnimator.setDuration(200);
                 slidedownAnimator.start();
             }
@@ -1221,6 +1225,30 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
             layoutContainer.setY(newY);
             layoutContainer.requestLayout();
         }
+    }
+
+    @Override
+    public void onShow() {
+        if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
+            ObjectAnimator slideupAnimator = ObjectAnimator.ofFloat(layoutContainer, "translationY", -getResources().getDimension(R.dimen.media_preview_height));
+            slideupAnimator.setDuration(200);
+            slideupAnimator.start();
+        }
+    }
+
+    @Override
+    public void onHide() {
+        if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
+            ObjectAnimator slidedownAnimator = ObjectAnimator.ofFloat(layoutContainer, "translationY", baseY);
+            slidedownAnimator.setDuration(200);
+            slidedownAnimator.start();
+        }
+    }
+
+    @Override
+    public void onDragRelease(float distanceY) {
+        if (quickMediaPreview != null && quickMediaPreview.isShown() && (layoutContainer.getY() + distanceY) > baseY)
+            quickMediaPreview.hide();
     }
 
 
@@ -1252,10 +1280,11 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
   private class QuickMediaListener implements OnClickListener {
     @Override
     public void onClick(View v) {
-      if (quickMediaDrawer.isShown()) {
-          quickMediaDrawer.hide();
+      if (quickMediaPreview.isShown()) {
+          quickMediaPreview.hide();
       } else {
-        quickMediaDrawer.show();
+        quickMediaPreview.show();
+        composeText.clearFocus();
       }
     }
   }
@@ -1320,8 +1349,11 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
 
     @Override
     public void onFocusChange(View v, boolean hasFocus) {
-      if (hasFocus && emojiDrawer.isOpen()) {
-        emojiToggle.performClick();
+      if (hasFocus) {
+        if (emojiDrawer.isOpen())
+            emojiToggle.performClick();
+        if (quickMediaPreview.isShown())
+            quickMediaPreview.hide();
       }
     }
   }

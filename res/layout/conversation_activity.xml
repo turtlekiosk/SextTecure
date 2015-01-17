@@ -7,6 +7,12 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:visibility="invisible"/>
+    <org.thoughtcrime.securesms.components.QuickMediaPreview
+        android:id="@+id/quick_media_drawer"
+        android:layout_height="wrap_content"
+        android:layout_width="match_parent"
+        android:gravity="bottom"
+        android:visibility="gone"/>
     <LinearLayout
         android:layout_width="fill_parent"
         android:layout_height="fill_parent"
@@ -145,11 +151,5 @@
                 android:layout_weight="1.1"
                 android:layout_width="fill_parent"
                 android:layout_height="wrap_content"/>
-
-        <org.thoughtcrime.securesms.components.QuickMediaDrawer
-            android:id="@+id/quick_media_drawer"
-            android:layout_height="wrap_content"
-            android:layout_width="match_parent"
-            android:layout_weight="1"/>
     </LinearLayout>
 </FrameLayout>
