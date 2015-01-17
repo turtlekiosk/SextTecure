@@ -231,8 +231,9 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     MessageNotifier.setVisibleThread(threadId);
     markThreadAsRead();
 
-    if (quickMediaPreview != null && quickMediaPreview.isShown()) {
-        quickMediaPreview.switchCamera();
+    if (quickMediaPreview != null) {
+        quickMediaPreview.setLandscape(getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE);
+        if (quickMediaPreview.isShown()) quickMediaPreview.switchCamera();
     }
   }
 
@@ -788,7 +789,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     emojiDrawer.setComposeEditText(composeText);
     emojiToggle.setOnClickListener(new EmojiToggleListener());
     quickMediaPreview.setCallback(this);
-    quickMediaButton.setOnClickListener(new QuickMediaListener());
+    quickMediaButton.setOnClickListener(new QuickMediaOnClickListener());
 
     baseY = layoutContainer.getHeight() - quickMediaPreview.getHeight();
   }
@@ -1295,13 +1296,13 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     }
   }
 
-  private class QuickMediaListener implements OnClickListener {
+  private class QuickMediaOnClickListener implements OnClickListener {
     @Override
     public void onClick(View v) {
       if (quickMediaPreview.isShown()) {
           quickMediaPreview.hide();
       } else {
-        quickMediaPreview.show(getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE);
+        quickMediaPreview.show();
         composeText.clearFocus();
       }
     }

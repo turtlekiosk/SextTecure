@@ -94,7 +94,7 @@
                         android:layout_gravity="center_vertical"
                         android:background="@drawable/touch_highlight_background"
                         android:padding="10dp"
-                        android:src="@drawable/quick_camera_light"/>
+                        android:src="?quick_camera_icon"/>
 
                     <EditText
                             android:id="@+id/embedded_text_editor"
