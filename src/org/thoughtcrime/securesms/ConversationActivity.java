@@ -23,6 +23,7 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.net.Uri;
@@ -753,7 +754,6 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     charactersLeft = (TextView) findViewById(R.id.space_left);
     emojiDrawer    = (EmojiDrawer) findViewById(R.id.emoji_drawer);
     emojiToggle    = (EmojiToggle) findViewById(R.id.emoji_toggle);
-    mediaContainer = (FrameLayout) findViewById(R.id.media_container);
     quickMediaButton = (ImageButton) findViewById(R.id.quick_media_button);
     quickMediaPreview = (QuickMediaPreview) findViewById(R.id.quick_media_drawer);
     layoutContainer = (RelativeLayout) findViewById(R.id.layout_container);
@@ -778,7 +778,6 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     composeText.setOnFocusChangeListener(composeKeyPressedListener);
     emojiDrawer.setComposeEditText(composeText);
     emojiToggle.setOnClickListener(new EmojiToggleListener());
-    quickMediaPreview.setCameraContainer(mediaContainer);
     quickMediaPreview.setCallback(this);
     quickMediaButton.setOnClickListener(new QuickMediaListener());
 
@@ -1182,21 +1181,25 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
             slideupAnimator.start();
             getSupportActionBar().hide();
         } else {
-            getSupportActionBar().show();
-            layoutContainer.setVisibility(View.VISIBLE);
-            float newY = baseY - getResources().getDimension(R.dimen.media_preview_height);
-            ObjectAnimator slidedownAnimator = ObjectAnimator.ofFloat(layoutContainer, "translationY", newY);
-            slidedownAnimator.setDuration(200);
-            slidedownAnimator.start();
+            if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT) {
+                getSupportActionBar().show();
+                layoutContainer.setVisibility(View.VISIBLE);
+                float newY = baseY - getResources().getDimension(R.dimen.media_preview_height);
+                ObjectAnimator slidedownAnimator = ObjectAnimator.ofFloat(layoutContainer, "translationY", newY);
+                slidedownAnimator.setDuration(200);
+                slidedownAnimator.start();
+            }
         }
     }
 
     @Override
     public void onScroll(float distanceY) {
-        float startY = layoutContainer.getY();
+        float startY = layoutContainer.getHeight();
         float newY = startY - distanceY;
         if (newY <= baseY) {
-            layoutContainer.setY(newY);
+            ObjectAnimator slideAnimator = ObjectAnimator.ofFloat(layoutContainer, "translationY", newY);
+            slideAnimator.setDuration(0);
+            slideAnimator.start();
             layoutContainer.requestLayout();
         }
     }
@@ -1238,7 +1241,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
 
             @Override
             public void onAnimationEnd(Animator animation) {
-                quickMediaPreview.setVisibility(View.GONE);
+                quickMediaPreview.setVisibility(View.INVISIBLE);
                 quickMediaPreview.stop();
             }
 
@@ -1255,7 +1258,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
 
     @Override
     public void onDragRelease(float distanceY) {
-        if (quickMediaPreview != null && quickMediaPreview.isShown() && (layoutContainer.getY() + distanceY) > baseY)
+        if (quickMediaPreview != null && quickMediaPreview.isShown() && (layoutContainer.getHeight() + distanceY) > baseY)
             quickMediaPreview.hide();
     }
 
@@ -1291,7 +1294,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
       if (quickMediaPreview.isShown()) {
           quickMediaPreview.hide();
       } else {
-        quickMediaPreview.show();
+        quickMediaPreview.show(getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE);
         composeText.clearFocus();
       }
     }

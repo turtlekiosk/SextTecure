@@ -2,17 +2,12 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="fill_parent"
     android:layout_height="fill_parent">
-    <FrameLayout
-        android:id="@+id/media_container"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:visibility="invisible"/>
     <org.thoughtcrime.securesms.components.QuickMediaPreview
         android:id="@+id/quick_media_drawer"
-        android:layout_height="wrap_content"
+        android:layout_height="match_parent"
         android:layout_width="match_parent"
         android:gravity="bottom"
-        android:visibility="gone"/>
+        android:visibility="invisible"/>
     <LinearLayout
         android:layout_width="fill_parent"
         android:layout_height="fill_parent"
