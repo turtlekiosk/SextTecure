@@ -1,6 +1,5 @@
 package org.thoughtcrime.securesms.components;
 
-import android.app.Activity;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.hardware.Camera;
@@ -8,7 +7,6 @@ import android.net.Uri;
 import android.os.Environment;
 import android.util.DisplayMetrics;
 import android.util.Log;
-import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.ViewGroup;
@@ -57,32 +55,6 @@ public class QuickCamera extends SurfaceView implements SurfaceHolder.Callback {
         return c;
     }
 
-    public void setCameraDisplayOrientation(Activity activity,
-                                                   int cameraId, android.hardware.Camera camera) {
-        android.hardware.Camera.CameraInfo info =
-                new android.hardware.Camera.CameraInfo();
-        android.hardware.Camera.getCameraInfo(cameraId, info);
-
-        int rotation = getResources().getConfiguration().orientation;
-        int degrees = 0;
-        switch (rotation) {
-            case Surface.ROTATION_0: degrees = 0; break;
-            case Surface.ROTATION_90: degrees = 90; break;
-            case Surface.ROTATION_180: degrees = 180; break;
-            case Surface.ROTATION_270: degrees = 270; break;
-        }
-
-        int result;
-        if (info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) {
-            result = (info.orientation + degrees) % 360;
-            result = (360 - result) % 360;  // compensate the mirror
-        } else {  // back-facing
-            result = (info.orientation - degrees + 360) % 360;
-        }
-        camera.setDisplayOrientation(result);
-    }
-
-
     private Camera.Size getOptimalPreviewSize(List<Camera.Size> sizes, int width, int height) {
         final double ASPECT_TOLERANCE = 0.1;
         double targetRatio=(double)height / width;
@@ -119,7 +91,6 @@ public class QuickCamera extends SurfaceView implements SurfaceHolder.Callback {
     public void surfaceCreated(SurfaceHolder holder) {
         if (camera == null)
             camera = getCameraInstance(cameraId);
-
         try {
             camera.setPreviewDisplay(holder);
             if (running)
@@ -131,22 +102,13 @@ public class QuickCamera extends SurfaceView implements SurfaceHolder.Callback {
 
     @Override
     public void surfaceChanged(SurfaceHolder holder, int format, int w, int h) {
-        // If your preview can change or rotate, take care of those events here.
-        // Make sure to stop the preview before resizing or reformatting it.
         if (surfaceHolder.getSurface() == null){
-            // preview surface does not exist
             return;
         }
-        // stop preview before making changes
         try {
             camera.stopPreview();
         } catch (Exception e){
-            // ignore: tried to stop a non-existent preview
         }
-        // set preview size and make any resize, rotate or
-        // reformatting changes here
-
-        // start preview with new settings
         startPreview();
     }
 
@@ -176,7 +138,7 @@ public class QuickCamera extends SurfaceView implements SurfaceHolder.Callback {
         }
     }
 
-    public void takePicture(final QuickMediaDrawer.Callback callback) {
+    public void takePicture(final QuickMediaPreview.Callback callback) {
         if (camera != null) {
             camera.takePicture(null, null, new Camera.PictureCallback() {
                 @Override
@@ -215,22 +177,14 @@ public class QuickCamera extends SurfaceView implements SurfaceHolder.Callback {
         }
     }
 
-    /** Create a file Uri for saving an image or video */
     private static Uri getOutputMediaFileUri(int type){
         return Uri.fromFile(getOutputMediaFile(type));
     }
 
-    /** Create a File for saving an image or video */
     private static File getOutputMediaFile(int type){
-        // To be safe, you should check that the SDCard is mounted
-        // using Environment.getExternalStorageState() before doing this.
 
         File mediaStorageDir = new File(Environment.getExternalStoragePublicDirectory(
                 Environment.DIRECTORY_PICTURES), "ts_file");
-        // This location works best if you want the created images to be shared
-        // between applications and persist after your app has been uninstalled.
-
-        // Create the storage directory if it does not exist
         if (! mediaStorageDir.exists()){
             if (! mediaStorageDir.mkdirs()){
                 Log.d("ts_file", "failed to create directory");
