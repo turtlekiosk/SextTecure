@@ -14,17 +14,20 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
 
+import com.nineoldandroids.animation.ObjectAnimator;
+
 import org.thoughtcrime.securesms.R;
 
-public class QuickMediaPreview extends FrameLayout implements GestureDetector.OnGestureListener {
+public class QuickMediaPreview extends FrameLayout implements
+        GestureDetector.OnGestureListener, QuickCamera.Callback {
     private final Context context;
-    private FrameLayout controlContainer, cameraContainer;
     private QuickCamera quickCamera;
     private View cameraControls;
     private boolean fullscreen = false;
     private Callback callback;
     private GestureDetectorCompat mDetector;
     private ImageButton fullScreenButton;
+    private int newOffset;
 
     public QuickMediaPreview(Context context) {
         this(context, null);
@@ -33,8 +36,6 @@ public class QuickMediaPreview extends FrameLayout implements GestureDetector.On
     public QuickMediaPreview(final Context context, AttributeSet attrs) {
         super(context, attrs);
         this.context = context;
-        controlContainer = (FrameLayout) inflate(this.context, R.layout.quick_media_control_container, null);
-        this.addView(controlContainer);
         mDetector = new GestureDetectorCompat(context,this);
         setOnTouchListener(new View.OnTouchListener() {
             @Override
@@ -45,10 +46,6 @@ public class QuickMediaPreview extends FrameLayout implements GestureDetector.On
         });
     }
 
-    public void setCameraContainer(FrameLayout cameraContainer) {
-        this.cameraContainer = cameraContainer;
-    }
-
     public void setCallback(Callback callback) {
         this.callback = callback;
     }
@@ -56,36 +53,29 @@ public class QuickMediaPreview extends FrameLayout implements GestureDetector.On
     public void stop() {
         if (quickCamera != null)
             quickCamera.stopPreview();
-        if (cameraContainer != null)
-            cameraContainer.setVisibility(View.INVISIBLE);
-        if (controlContainer != null)
-            controlContainer.setVisibility(View.GONE);
     }
 
     private void adjustQuickMediaOffset() {
-        DisplayMetrics displayMetrics = getResources().getDisplayMetrics();
-        int pixelOffset = (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP,
-                getResources().getDimensionPixelOffset(R.dimen.media_preview_height),
-                getResources().getDisplayMetrics());
-        int newOffset;
-        if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT)
-            newOffset = (displayMetrics.widthPixels - pixelOffset)/2;
-        else
-            newOffset = (displayMetrics.heightPixels - pixelOffset)/2;
-        FrameLayout.LayoutParams layoutParams = (FrameLayout.LayoutParams) controlContainer.getLayoutParams();
-        layoutParams.setMargins(0, newOffset, 0, 0);
-        controlContainer.setLayoutParams(layoutParams);
+        if (quickCamera != null) {
+            newOffset = (getHeight() - getResources().getDimensionPixelOffset(R.dimen.media_preview_height)) / 2;
+            ObjectAnimator slideAnimator = ObjectAnimator.ofFloat(quickCamera, "translationY", newOffset);
+            slideAnimator.setDuration(0);
+            slideAnimator.start();
+        }
     }
 
     private void setFullscreenCapture(boolean fullscreen) {
         this.fullscreen = fullscreen;
         if (callback != null) callback.onSetFullScreen(fullscreen);
         if (fullscreen) {
-            FrameLayout.LayoutParams layoutParams = (FrameLayout.LayoutParams) controlContainer.getLayoutParams();
-            layoutParams.setMargins(0, 0, 0, 0);
-            controlContainer.setLayoutParams(layoutParams);
-            if (fullScreenButton != null)
-                fullScreenButton.setImageResource(R.drawable.quick_camera_exit_fullscreen);
+            if (quickCamera != null) {
+                ObjectAnimator slideAnimator = ObjectAnimator.ofFloat(quickCamera, "translationY", 0);
+                slideAnimator.setDuration(0);
+                slideAnimator.start();
+                quickCamera.requestLayout();
+                if (fullScreenButton != null)
+                    fullScreenButton.setImageResource(R.drawable.quick_camera_exit_fullscreen);
+            }
         } else {
             adjustQuickMediaOffset();
             if (fullScreenButton != null)
@@ -94,9 +84,11 @@ public class QuickMediaPreview extends FrameLayout implements GestureDetector.On
     }
 
     private void initializeCameraControls() {
-        cameraControls = inflate(context, R.layout.quick_camera_controls, null);
-        controlContainer.removeAllViews();
-        controlContainer.addView(cameraControls);
+        if (cameraControls == null) {
+            cameraControls = inflate(context, R.layout.quick_camera_controls, null);
+            addView(cameraControls);
+        }
+        cameraControls.bringToFront();
         ImageButton captureButton = (ImageButton) cameraControls.findViewById(R.id.shutter_button);
         captureButton.setOnClickListener(new OnClickListener() {
             @Override
@@ -149,8 +141,6 @@ public class QuickMediaPreview extends FrameLayout implements GestureDetector.On
 
     @Override
     public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
-        //int newPadding = (int) (getPaddingTop() - distanceY);
-        //setPadding(0, newPadding, 0, 0);
         if (callback != null) {
             callback.onScroll(distanceY);
             return true;
@@ -190,8 +180,9 @@ public class QuickMediaPreview extends FrameLayout implements GestureDetector.On
         public void onDragRelease(float distanceY);
     }
 
-    public void show() {
+    public void show(boolean fullscreen) {
         if (callback != null) callback.onShow();
+        setFullscreenCapture(fullscreen);
         InputMethodManager imm = (InputMethodManager) context.getSystemService(Context.INPUT_METHOD_SERVICE);
         imm.hideSoftInputFromWindow(getWindowToken(), 0);
     }
@@ -220,16 +211,21 @@ public class QuickMediaPreview extends FrameLayout implements GestureDetector.On
 
     public void switchCamera() {
         //TODO: pause other inputs
-        if (controlContainer != null && cameraContainer != null) {
-            cameraContainer.removeAllViews();
-            quickCamera = new QuickCamera(context);
-            cameraContainer.addView(quickCamera);
-            initializeCameraControls();
-            cameraContainer.setVisibility(View.VISIBLE);
-            controlContainer.setVisibility(View.VISIBLE);
-            adjustQuickMediaOffset();
-            if (quickCamera != null)
-                quickCamera.startPreview();
+        removeAllViews();
+        quickCamera = new QuickCamera(context, this);
+        addView(quickCamera);
+        initializeCameraControls();
+        setVisibility(View.VISIBLE);
+        adjustQuickMediaOffset();
+        if (quickCamera != null)
+            quickCamera.startPreview();
+    }
+
+    @Override
+    public void displayCameraInUseCopy(boolean inUse) {
+        if (cameraControls !=  null) {
+            View errorCopy = cameraControls.findViewById(R.id.camera_unavailable_label);
+            if (errorCopy != null) errorCopy.setVisibility(inUse ? View.VISIBLE : View.GONE);
         }
     }
 }

@@ -1,7 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:gravity="bottom"
+    tools:background="@color/gray50">
+    <TextView
+        android:id="@+id/camera_unavailable_label"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:text="@string/quick_media_preview_camera_in_use"
+        android:gravity="center"
+        android:background="@color/gray50"
+        android:textColor="@color/white"
+        android:textSize="20dp"
+        android:visibility="gone"/>
     <ImageButton
         android:id="@+id/shutter_button"
         android:layout_width="wrap_content"
@@ -29,5 +42,6 @@
         android:background="#00000000"
         android:src="@drawable/quick_camera_front"
         android:padding="20dp"
-        android:visibility="invisible"/>
+        android:visibility="invisible"
+        tools:visibility="visible"/>
 </RelativeLayout>

@@ -934,6 +934,9 @@
     <!-- media_preview_activity -->
     <string name="media_preview_activity__image_content_description">Image Preview</string>
 
+    <!-- QuickMediaPreview -->
+    <string name="quick_media_preview_camera_in_use">Camera unavailable</string>
+
     <!-- Trimmer -->
     <string name="trimmer__deleting">Deleting...</string>
     <string name="trimmer__deleting_old_messages">Deleting old messages...</string>
