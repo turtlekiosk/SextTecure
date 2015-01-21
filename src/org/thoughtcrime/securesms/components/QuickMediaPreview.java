@@ -66,9 +66,7 @@ public class QuickMediaPreview extends FrameLayout implements
 
     private void adjustQuickMediaOffsetWithDelay(float position) {
         if (quickCamera != null) {
-            ObjectAnimator slideAnimator = ObjectAnimator.ofFloat(quickCamera, "translationY", position);
-            slideAnimator.setDuration(200);
-            slideAnimator.start();
+            animateVerticalTranslationToPosition(quickCamera, position);
         }
     }
 
@@ -219,17 +217,7 @@ public class QuickMediaPreview extends FrameLayout implements
         return fullscreen;
     }
 
-    public void switchAudio() {
-        quickCamera.stopPreview();
-        //TODO: add audio initialization
-    }
-
-    public void switchImages() {
-        quickCamera.stopPreview();
-        //TODO: add image initialization
-    }
-
-    public void switchCamera() {
+    public void start() {
         //TODO: pause other inputs
         removeAllViews();
         quickCamera = new QuickCamera(context, this);
@@ -248,5 +236,12 @@ public class QuickMediaPreview extends FrameLayout implements
             View errorCopy = cameraControls.findViewById(R.id.camera_unavailable_label);
             if (errorCopy != null) errorCopy.setVisibility(inUse ? View.VISIBLE : View.GONE);
         }
+    }
+
+    public static void animateVerticalTranslationToPosition(View view, float position) {
+        //float initialPosition = view.getTop();
+        ObjectAnimator slideupAnimator = ObjectAnimator.ofFloat(view, "y", position);
+        slideupAnimator.setDuration(200);
+        slideupAnimator.start();
     }
 }
