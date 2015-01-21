@@ -167,7 +167,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
   private EmojiDrawer                   emojiDrawer;
   private EmojiToggle                   emojiToggle;
   private FrameLayout                   mediaContainer;
-  private ImageButton                   quickMediaButton;
+  private ImageButton                   cameraButton;
   private QuickMediaPreview quickMediaPreview;
   private RelativeLayout layoutContainer;
 
@@ -232,14 +232,12 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     initializeIme();
     initializeCharactersLeftViewEnabledCheck();
     calculateCharactersRemaining();
+    initializeQuickMedia();
 
     MessageNotifier.setVisibleThread(threadId);
     markThreadAsRead();
 
-    if (quickMediaPreview != null) {
-        quickMediaPreview.setLandscape(getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE);
-        if (quickMediaPreview.isShown()) quickMediaPreview.switchCamera();
-    }
+
   }
 
   @Override
@@ -756,7 +754,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     charactersLeft = (TextView) findViewById(R.id.space_left);
     emojiDrawer    = (EmojiDrawer) findViewById(R.id.emoji_drawer);
     emojiToggle    = (EmojiToggle) findViewById(R.id.emoji_toggle);
-    quickMediaButton = (ImageButton) findViewById(R.id.quick_media_button);
+    cameraButton = (ImageButton) findViewById(R.id.quick_media_button);
     quickMediaPreview = (QuickMediaPreview) findViewById(R.id.quick_media_drawer);
     layoutContainer = (RelativeLayout) findViewById(R.id.layout_container);
 
@@ -781,7 +779,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     emojiDrawer.setComposeEditText(composeText);
     emojiToggle.setOnClickListener(new EmojiToggleListener());
     quickMediaPreview.setCallback(this);
-    quickMediaButton.setOnClickListener(new QuickMediaOnClickListener());
+    cameraButton.setOnClickListener(new QuickMediaOnClickListener());
 
     baseY = layoutContainer.getHeight() - quickMediaPreview.getHeight();
   }
@@ -834,6 +832,13 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
 
     registerReceiver(groupUpdateReceiver,
                      new IntentFilter(GroupDatabase.DATABASE_UPDATE_ACTION));
+  }
+
+  private void initializeQuickMedia() {
+      if (quickMediaPreview != null) {
+          quickMediaPreview.setLandscape(getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE);
+          if (quickMediaPreview.isShown()) quickMediaPreview.start();
+      }
   }
 
   //////// Helper Methods
@@ -1157,31 +1162,20 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     @Override
     public void onSetFullScreen(final boolean fullscreen) {
         if (fullscreen) {
-            ObjectAnimator slideupAnimator = ObjectAnimator.ofFloat(layoutContainer, "translationY", -layoutContainer.getHeight());
-            slideupAnimator.setDuration(200);
-            slideupAnimator.start();
+            QuickMediaPreview.animateVerticalTranslationToPosition(layoutContainer, -layoutContainer.getHeight());
             getSupportActionBar().hide();
         } else {
-            if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT) {
-                getSupportActionBar().show();
-                layoutContainer.setVisibility(View.VISIBLE);
-                float newY = baseY - getResources().getDimension(R.dimen.media_preview_height);
-                ObjectAnimator slidedownAnimator = ObjectAnimator.ofFloat(layoutContainer, "translationY", newY);
-                slidedownAnimator.setDuration(200);
-                slidedownAnimator.start();
-            }
+            layoutContainer.setVisibility(View.VISIBLE);
+            float newY = 0;
+            if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT)
+                 newY = -getResources().getDimension(R.dimen.media_preview_height);
+            QuickMediaPreview.animateVerticalTranslationToPosition(layoutContainer, newY);
+            getSupportActionBar().show();
         }
     }
 
     @Override
     public void onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
-        /*    float fixed = e1.getY() - (layoutContainer.getY() + layoutContainer.getHeight());
-            float offset = e2.getY() - fixed;
-            if (offset > 0) {
-                layoutContainer.setY(offset + layoutContainer.getHeight());
-                layoutContainer.requestLayout();
-            }
-        }*/
         if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
             float startY = layoutContainer.getY();
             float newY = startY - distanceY;
@@ -1194,28 +1188,8 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
 
     @Override
     public void onShow() {
-        ObjectAnimator slideupAnimator = ObjectAnimator.ofFloat(layoutContainer, "translationY", baseY - getResources().getDimension(R.dimen.media_preview_height));
-        slideupAnimator.setDuration(200);
-        slideupAnimator.addListener(new Animator.AnimatorListener() {
-            @Override
-            public void onAnimationStart(Animator animation) {
-                quickMediaPreview.switchCamera();
-                quickMediaPreview.setVisibility(View.VISIBLE);
-            }
-
-            @Override
-            public void onAnimationEnd(Animator animation) {
-            }
-
-            @Override
-            public void onAnimationCancel(Animator animation) {
-            }
-
-            @Override
-            public void onAnimationRepeat(Animator animation) {
-            }
-        });
-        slideupAnimator.start();
+        quickMediaPreview.start();
+        quickMediaPreview.setVisibility(View.VISIBLE);
     }
 
     @Override
