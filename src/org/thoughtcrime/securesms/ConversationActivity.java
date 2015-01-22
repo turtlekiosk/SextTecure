@@ -53,6 +53,7 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
+import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -165,8 +166,8 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
   private EmojiToggle                   emojiToggle;
   private FrameLayout                   mediaContainer;
   private ImageButton                   cameraButton;
-  private QuickMediaPreview quickMediaPreview;
-  private RelativeLayout layoutContainer;
+  private QuickMediaPreview             quickMediaPreview;
+  private RelativeLayout                layoutContainer;
 
   private Recipients recipients;
   private long       threadId;
@@ -787,6 +788,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     emojiDrawer.setComposeEditText(composeText);
     emojiToggle.setOnClickListener(new EmojiToggleListener());
     quickMediaPreview.setCallback(this);
+    quickMediaPreview.setCoverView(layoutContainer);
     cameraButton.setOnClickListener(new QuickMediaOnClickListener());
 
     baseY = layoutContainer.getHeight() - quickMediaPreview.getHeight();
@@ -1181,69 +1183,11 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
 
     @Override
     public void onSetFullScreen(final boolean fullscreen) {
-        if (fullscreen) {
-            QuickMediaPreview.animateVerticalTranslationToPosition(layoutContainer, -layoutContainer.getHeight());
+        if (fullscreen)
             getSupportActionBar().hide();
-        } else {
-            layoutContainer.setVisibility(View.VISIBLE);
-            float newY = 0;
-            if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT)
-                 newY = -getResources().getDimension(R.dimen.media_preview_height);
-            QuickMediaPreview.animateVerticalTranslationToPosition(layoutContainer, newY);
+        else
             getSupportActionBar().show();
-        }
     }
-
-    @Override
-    public void onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
-        if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
-            float startY = layoutContainer.getY();
-            float newY = startY - distanceY;
-            if (newY <= baseY) {
-                layoutContainer.setY(newY);
-                layoutContainer.requestLayout();
-            }
-        }
-    }
-
-    @Override
-    public void onShow() {
-        quickMediaPreview.start();
-        quickMediaPreview.setVisibility(View.VISIBLE);
-    }
-
-    @Override
-    public void onHide() {
-        ObjectAnimator slidedownAnimator = ObjectAnimator.ofFloat(layoutContainer, "translationY", baseY);
-        slidedownAnimator.setDuration(200);
-        slidedownAnimator.addListener(new Animator.AnimatorListener() {
-            @Override
-            public void onAnimationStart(Animator animation) {
-            }
-
-            @Override
-            public void onAnimationEnd(Animator animation) {
-                quickMediaPreview.setVisibility(View.INVISIBLE);
-                quickMediaPreview.stop();
-            }
-
-            @Override
-            public void onAnimationCancel(Animator animation) {
-            }
-
-            @Override
-            public void onAnimationRepeat(Animator animation) {
-            }
-        });
-        slidedownAnimator.start();
-    }
-
-    @Override
-    public void onDragRelease(float distanceY) {
-        if (quickMediaPreview != null && quickMediaPreview.isShown() && (layoutContainer.getHeight() + distanceY) > baseY)
-            quickMediaPreview.hide();
-    }
-
 
     // Listeners
 
