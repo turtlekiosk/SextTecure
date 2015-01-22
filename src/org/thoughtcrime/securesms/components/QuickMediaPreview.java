@@ -1,6 +1,8 @@
 package org.thoughtcrime.securesms.components;
 
+import android.app.Activity;
 import android.content.Context;
+import android.content.res.Configuration;
 import android.net.Uri;
 import android.os.Build;
 import android.support.v4.view.GestureDetectorCompat;
@@ -8,10 +10,12 @@ import android.util.AttributeSet;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
 
+import com.nineoldandroids.animation.Animator;
 import com.nineoldandroids.animation.ObjectAnimator;
 
 import org.thoughtcrime.securesms.R;
@@ -27,6 +31,8 @@ public class QuickMediaPreview extends FrameLayout implements
     private ImageButton fullScreenButton;
     private int newOffset;
     private boolean landscape = false;
+    private ViewGroup coverView;
+    private float baseY;
 
     public QuickMediaPreview(Context context) {
         this(context, null);
@@ -47,6 +53,11 @@ public class QuickMediaPreview extends FrameLayout implements
 
     public void setCallback(Callback callback) {
         this.callback = callback;
+    }
+
+    public void setCoverView(ViewGroup coverView) {
+        this.coverView = coverView;
+        baseY = coverView.getTop();
     }
 
     public void stop() {
@@ -72,7 +83,19 @@ public class QuickMediaPreview extends FrameLayout implements
 
     private void setFullscreenCapture(boolean fullscreen) {
         this.fullscreen = fullscreen;
-        if (callback != null) callback.onSetFullScreen(fullscreen);
+        //TODO: combine these two clauses
+        if (coverView != null) {
+            if (callback != null) callback.onSetFullScreen(fullscreen);
+            if (fullscreen) {
+                animateVerticalTranslationToPosition(coverView, baseY - coverView.getHeight());
+            } else {
+                coverView.setVisibility(View.VISIBLE);
+                float newY = baseY;
+                if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT)
+                    newY = baseY - getResources().getDimension(R.dimen.media_preview_height);
+                animateVerticalTranslationToPosition(coverView, newY);
+            }
+        }
         if (fullscreen || landscape) {
             if (quickCamera != null) {
                 adjustQuickMediaOffsetWithDelay(0f);
@@ -151,12 +174,17 @@ public class QuickMediaPreview extends FrameLayout implements
 
     @Override
     public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
-        if (callback != null) {
-            callback.onScroll(e1, e2, distanceX, distanceY);
+        if (coverView != null) {
             if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
+                float startY = coverView.getY();
+                float newY = startY - distanceY;
+                if (newY <= baseY) {
+                    coverView.setY(newY);
+                    coverView.requestLayout();
+                }
                 if (quickCamera != null) {
-                    float startY = quickCamera.getY();
-                    float newY = startY - distanceY;
+                    startY = quickCamera.getY();
+                    newY = startY - distanceY;
                     if (newY >= 0)
                         quickCamera.setY(newY);
                 }
@@ -183,8 +211,8 @@ public class QuickMediaPreview extends FrameLayout implements
         } else if (velocityY < -1) {
             setFullscreenCapture(true);
             return true;
-        } else {
-            if (callback != null) callback.onDragRelease(velocityY);
+        } else if (coverView != null && isShown() && (coverView.getHeight() + velocityY) > baseY){
+            hide();
         }
         return false;
     }
@@ -192,21 +220,43 @@ public class QuickMediaPreview extends FrameLayout implements
     public interface Callback {
         public void onImageCapture(Uri imageUri);
         public void onSetFullScreen(boolean fullscreen);
-        public void onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY);
-        public void onShow();
-        public void onHide();
-        public void onDragRelease(float distanceY);
     }
 
     public void show() {
-        if (callback != null) callback.onShow();
+        if (coverView != null) {
+            start();
+            setVisibility(View.VISIBLE);
+        }
         setFullscreenCapture(landscape);
         InputMethodManager imm = (InputMethodManager) context.getSystemService(Context.INPUT_METHOD_SERVICE);
         imm.hideSoftInputFromWindow(getWindowToken(), 0);
     }
 
     public void hide() {
-        if (callback != null) callback.onHide();
+        if (coverView != null) {
+            ObjectAnimator slidedownAnimator = ObjectAnimator.ofFloat(coverView, "translationY", baseY);
+            slidedownAnimator.setDuration(200);
+            slidedownAnimator.addListener(new Animator.AnimatorListener() {
+                @Override
+                public void onAnimationStart(Animator animation) {
+                }
+
+                @Override
+                public void onAnimationEnd(Animator animation) {
+                    setVisibility(View.INVISIBLE);
+                    stop();
+                }
+
+                @Override
+                public void onAnimationCancel(Animator animation) {
+                }
+
+                @Override
+                public void onAnimationRepeat(Animator animation) {
+                }
+            });
+            slidedownAnimator.start();
+        }
     }
 
     public boolean isShown() {
@@ -238,10 +288,10 @@ public class QuickMediaPreview extends FrameLayout implements
         }
     }
 
-    public static void animateVerticalTranslationToPosition(View view, float position) {
+    private static void animateVerticalTranslationToPosition(View view, float position) {
         //float initialPosition = view.getTop();
-        ObjectAnimator slideupAnimator = ObjectAnimator.ofFloat(view, "y", position);
-        slideupAnimator.setDuration(200);
-        slideupAnimator.start();
+        ObjectAnimator slideAnimator = ObjectAnimator.ofFloat(view, "y", position);
+        slideAnimator.setDuration(200);
+        slideAnimator.start();
     }
 }
