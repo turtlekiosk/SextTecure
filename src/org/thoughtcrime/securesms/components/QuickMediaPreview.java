@@ -1,8 +1,6 @@
 package org.thoughtcrime.securesms.components;
 
-import android.app.Activity;
 import android.content.Context;
-import android.content.res.Configuration;
 import android.net.Uri;
 import android.os.Build;
 import android.support.v4.view.GestureDetectorCompat;
@@ -30,7 +28,7 @@ public class QuickMediaPreview extends FrameLayout implements
     private GestureDetectorCompat mDetector;
     private ImageButton fullScreenButton;
     private int newOffset;
-    private boolean landscape = false;
+    private boolean forceFullscreen = false;
     private ViewGroup coverView;
     private float baseY;
 
@@ -65,52 +63,35 @@ public class QuickMediaPreview extends FrameLayout implements
             quickCamera.stopPreview();
     }
 
-    public void setLandscape(boolean landscape) {
-        this.landscape = landscape;
-        if (fullScreenButton != null) {
-            if (landscape)
-                fullScreenButton.setImageResource(R.drawable.quick_camera_hide);
-            else
-                fullScreenButton.setImageResource(R.drawable.quick_camera_fullscreen);
-        }
+    public void setForceFullscreen(boolean forceFullscreen) {
+        this.forceFullscreen = forceFullscreen;
+        if (fullScreenButton != null)
+            fullScreenButton.setImageResource(forceFullscreen ? R.drawable.quick_camera_hide : R.drawable.quick_camera_fullscreen);
     }
 
     private void adjustQuickMediaOffsetWithDelay(float position) {
-        if (quickCamera != null) {
-            animateVerticalTranslationToPosition(quickCamera, position);
-        }
+        animateVerticalTranslationToPosition(quickCamera, position);
     }
 
     private void setFullscreenCapture(boolean fullscreen) {
         this.fullscreen = fullscreen;
-        //TODO: combine these two clauses
-        if (coverView != null) {
-            if (callback != null) callback.onSetFullScreen(fullscreen);
-            if (fullscreen) {
+        if (callback != null) callback.onSetFullScreen(fullscreen);
+        if (fullscreen) {
+            adjustQuickMediaOffsetWithDelay(0f);
+            if (fullScreenButton != null)
+                fullScreenButton.setImageResource(forceFullscreen ? R.drawable.quick_camera_hide : R.drawable.quick_camera_exit_fullscreen);
+            if (coverView != null)
                 animateVerticalTranslationToPosition(coverView, baseY - coverView.getHeight());
-            } else {
-                coverView.setVisibility(View.VISIBLE);
-                float newY = baseY;
-                if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT)
-                    newY = baseY - getResources().getDimension(R.dimen.media_preview_height);
-                animateVerticalTranslationToPosition(coverView, newY);
-            }
-        }
-        if (fullscreen || landscape) {
-            if (quickCamera != null) {
-                adjustQuickMediaOffsetWithDelay(0f);
-                if (fullScreenButton != null)
-                    if (landscape)
-                        fullScreenButton.setImageResource(R.drawable.quick_camera_hide);
-                    else
-                        fullScreenButton.setImageResource(R.drawable.quick_camera_exit_fullscreen);
-
-            }
         } else {
             newOffset = (getHeight() - getResources().getDimensionPixelOffset(R.dimen.media_preview_height)) / 2;
             adjustQuickMediaOffsetWithDelay(newOffset);
-            if (fullScreenButton != null)
+            if (fullScreenButton != null && !forceFullscreen)
                 fullScreenButton.setImageResource(R.drawable.quick_camera_fullscreen);
+            if (coverView != null) {
+                coverView.setVisibility(View.VISIBLE);
+                float newY = forceFullscreen ? baseY : baseY - getResources().getDimension(R.dimen.media_preview_height);
+                animateVerticalTranslationToPosition(coverView, newY);
+            }
         }
     }
 
@@ -126,15 +107,16 @@ public class QuickMediaPreview extends FrameLayout implements
                 takePicture();
             }
         });
-        final ImageButton fullscreenCaptureButton = (ImageButton) cameraControls.findViewById(R.id.fullscreen_button);
-        fullScreenButton = fullscreenCaptureButton;
-        fullscreenCaptureButton.setOnClickListener(new OnClickListener() {
+        fullScreenButton = (ImageButton) cameraControls.findViewById(R.id.fullscreen_button);
+        fullScreenButton.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (landscape)
+                if (forceFullscreen) {
                     hide();
-                else
+                    setFullscreenCapture(false);
+                } else {
                     setFullscreenCapture(!fullscreen);
+                }
             }
         });
         final ImageButton swapCameraButton = (ImageButton) cameraControls.findViewById(R.id.swap_camera_button);
@@ -152,9 +134,8 @@ public class QuickMediaPreview extends FrameLayout implements
 
     private void takePicture() {
         setFullscreenCapture(false);
-        if (quickCamera != null) {
+        if (quickCamera != null)
             quickCamera.takePicture(callback);
-        }
     }
 
     @Override
@@ -201,18 +182,17 @@ public class QuickMediaPreview extends FrameLayout implements
 
     @Override
     public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
-        if (velocityY > 1) {
-            if (fullscreen && !landscape) {
+        if (velocityY > 0) {
+            if (fullscreen && !forceFullscreen) {
                 setFullscreenCapture(false);
             } else {
+                setFullscreenCapture(false);
                 hide();
             }
             return true;
-        } else if (velocityY < -1) {
+        } else if (velocityY < 0) {
             setFullscreenCapture(true);
             return true;
-        } else if (coverView != null && isShown() && (coverView.getHeight() + velocityY) > baseY){
-            hide();
         }
         return false;
     }
@@ -223,11 +203,9 @@ public class QuickMediaPreview extends FrameLayout implements
     }
 
     public void show() {
-        if (coverView != null) {
-            start();
-            setVisibility(View.VISIBLE);
-        }
-        setFullscreenCapture(landscape);
+        start();
+        setVisibility(View.VISIBLE);
+        setFullscreenCapture(forceFullscreen);
         InputMethodManager imm = (InputMethodManager) context.getSystemService(Context.INPUT_METHOD_SERVICE);
         imm.hideSoftInputFromWindow(getWindowToken(), 0);
     }
@@ -268,7 +246,6 @@ public class QuickMediaPreview extends FrameLayout implements
     }
 
     public void start() {
-        //TODO: pause other inputs
         removeAllViews();
         quickCamera = new QuickCamera(context, this);
         addView(quickCamera);
@@ -276,8 +253,7 @@ public class QuickMediaPreview extends FrameLayout implements
         setVisibility(View.VISIBLE);
         newOffset = (getHeight() - getResources().getDimensionPixelOffset(R.dimen.media_preview_height)) / 2;
         adjustQuickMediaOffsetWithDelay(newOffset);
-        if (quickCamera != null)
-            quickCamera.startPreview();
+        quickCamera.startPreview();
     }
 
     @Override
@@ -289,9 +265,10 @@ public class QuickMediaPreview extends FrameLayout implements
     }
 
     private static void animateVerticalTranslationToPosition(View view, float position) {
-        //float initialPosition = view.getTop();
-        ObjectAnimator slideAnimator = ObjectAnimator.ofFloat(view, "y", position);
-        slideAnimator.setDuration(200);
-        slideAnimator.start();
+        if (view != null) {
+            ObjectAnimator slideAnimator = ObjectAnimator.ofFloat(view, "y", position);
+            slideAnimator.setDuration(200);
+            slideAnimator.start();
+        }
     }
 }
