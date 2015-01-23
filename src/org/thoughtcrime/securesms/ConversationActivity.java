@@ -42,7 +42,6 @@ import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.View.OnFocusChangeListener;
@@ -53,14 +52,11 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
-import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.protobuf.ByteString;
-import com.nineoldandroids.animation.Animator;
-import com.nineoldandroids.animation.ObjectAnimator;
 
 import org.thoughtcrime.securesms.components.EmojiDrawer;
 import org.thoughtcrime.securesms.components.EmojiToggle;
@@ -838,7 +834,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
 
   private void initializeQuickMedia() {
       if (quickMediaPreview != null) {
-          quickMediaPreview.setLandscape(getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE);
+          quickMediaPreview.setForceFullscreen(getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE);
           if (quickMediaPreview.isShown()) quickMediaPreview.start();
       }
   }
