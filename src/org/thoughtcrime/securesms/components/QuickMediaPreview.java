@@ -20,6 +20,7 @@ import org.thoughtcrime.securesms.R;
 
 public class QuickMediaPreview extends FrameLayout implements
         GestureDetector.OnGestureListener, QuickCamera.Callback {
+    private static final int ANIMATION_LENGTH = 200;
     private final Context context;
     private QuickCamera quickCamera;
     private View cameraControls;
@@ -69,22 +70,18 @@ public class QuickMediaPreview extends FrameLayout implements
             fullScreenButton.setImageResource(forceFullscreen ? R.drawable.quick_camera_hide : R.drawable.quick_camera_fullscreen);
     }
 
-    private void adjustQuickMediaOffsetWithDelay(float position) {
-        animateVerticalTranslationToPosition(quickCamera, position);
-    }
-
     private void setFullscreenCapture(boolean fullscreen) {
         this.fullscreen = fullscreen;
         if (callback != null) callback.onSetFullScreen(fullscreen);
         if (fullscreen) {
-            adjustQuickMediaOffsetWithDelay(0f);
+            animateVerticalTranslationToPosition(quickCamera, 0f);
             if (fullScreenButton != null)
                 fullScreenButton.setImageResource(forceFullscreen ? R.drawable.quick_camera_hide : R.drawable.quick_camera_exit_fullscreen);
             if (coverView != null)
                 animateVerticalTranslationToPosition(coverView, baseY - coverView.getHeight());
         } else {
             newOffset = (getHeight() - getResources().getDimensionPixelOffset(R.dimen.media_preview_height)) / 2;
-            adjustQuickMediaOffsetWithDelay(newOffset);
+            animateVerticalTranslationToPosition(quickCamera, newOffset);
             if (fullScreenButton != null && !forceFullscreen)
                 fullScreenButton.setImageResource(R.drawable.quick_camera_fullscreen);
             if (coverView != null) {
@@ -159,10 +156,8 @@ public class QuickMediaPreview extends FrameLayout implements
             if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
                 float startY = coverView.getY();
                 float newY = startY - distanceY;
-                if (newY <= baseY) {
-                    coverView.setY(newY);
-                    coverView.requestLayout();
-                }
+                coverView.setY(newY);
+                coverView.requestLayout();
                 if (quickCamera != null) {
                     startY = quickCamera.getY();
                     newY = startY - distanceY;
@@ -252,7 +247,7 @@ public class QuickMediaPreview extends FrameLayout implements
         initializeCameraControls();
         setVisibility(View.VISIBLE);
         newOffset = (getHeight() - getResources().getDimensionPixelOffset(R.dimen.media_preview_height)) / 2;
-        adjustQuickMediaOffsetWithDelay(newOffset);
+        animateVerticalTranslationToPosition(quickCamera, newOffset);
         quickCamera.startPreview();
     }
 
@@ -266,8 +261,9 @@ public class QuickMediaPreview extends FrameLayout implements
 
     private static void animateVerticalTranslationToPosition(View view, float position) {
         if (view != null) {
-            ObjectAnimator slideAnimator = ObjectAnimator.ofFloat(view, "y", position);
-            slideAnimator.setDuration(200);
+            float offset = position - view.getTop();
+            ObjectAnimator slideAnimator = ObjectAnimator.ofFloat(view, "translationY", offset);
+            slideAnimator.setDuration(ANIMATION_LENGTH);
             slideAnimator.start();
         }
     }
