@@ -9,11 +9,16 @@ import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.Animation;
+import android.view.animation.TranslateAnimation;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
+import android.widget.LinearLayout;
+import android.widget.Toast;
 
 import com.nineoldandroids.animation.Animator;
+import com.nineoldandroids.animation.AnimatorListenerAdapter;
 import com.nineoldandroids.animation.ObjectAnimator;
 
 import org.thoughtcrime.securesms.R;
@@ -21,17 +26,16 @@ import org.thoughtcrime.securesms.R;
 public class QuickMediaPreview extends FrameLayout implements
         GestureDetector.OnGestureListener, QuickCamera.Callback {
     private static final int ANIMATION_LENGTH = 200;
-    private final Context context;
     private QuickCamera quickCamera;
     private View cameraControls;
     private boolean fullscreen = false;
     private Callback callback;
     private GestureDetectorCompat mDetector;
     private ImageButton fullScreenButton;
-    private int newOffset;
     private boolean forceFullscreen = false;
     private ViewGroup coverView;
     private float baseY;
+    private boolean shown = false;
 
     public QuickMediaPreview(Context context) {
         this(context, null);
@@ -39,8 +43,11 @@ public class QuickMediaPreview extends FrameLayout implements
 
     public QuickMediaPreview(final Context context, AttributeSet attrs) {
         super(context, attrs);
-        this.context = context;
-        mDetector = new GestureDetectorCompat(context,this);
+        /*this.setClipChildren(false);
+        this.setClipToPadding(false);
+        this.setChildrenDrawingOrderEnabled(true);
+        this.setStaticTransformationsEnabled(true);*/
+        mDetector = new GestureDetectorCompat(context, this);
         setOnTouchListener(new View.OnTouchListener() {
             @Override
             public boolean onTouch(View v, MotionEvent event) {
@@ -50,13 +57,15 @@ public class QuickMediaPreview extends FrameLayout implements
         });
     }
 
-    public void setCallback(Callback callback) {
-        this.callback = callback;
+    @Override
+    protected void onFinishInflate() {
+        super.onFinishInflate();
+        coverView = (ViewGroup) findViewById(R.id.content);
+        baseY = coverView.getTop();
     }
 
-    public void setCoverView(ViewGroup coverView) {
-        this.coverView = coverView;
-        baseY = coverView.getTop();
+    public void setCallback(Callback callback) {
+        this.callback = callback;
     }
 
     public void stop() {
@@ -80,12 +89,11 @@ public class QuickMediaPreview extends FrameLayout implements
             if (coverView != null)
                 animateVerticalTranslationToPosition(coverView, baseY - coverView.getHeight());
         } else {
-            newOffset = (getHeight() - getResources().getDimensionPixelOffset(R.dimen.media_preview_height)) / 2;
+            int newOffset = (getHeight() - getResources().getDimensionPixelOffset(R.dimen.media_preview_height)) / 2;
             animateVerticalTranslationToPosition(quickCamera, newOffset);
             if (fullScreenButton != null && !forceFullscreen)
                 fullScreenButton.setImageResource(R.drawable.quick_camera_fullscreen);
             if (coverView != null) {
-                coverView.setVisibility(View.VISIBLE);
                 float newY = forceFullscreen ? baseY : baseY - getResources().getDimension(R.dimen.media_preview_height);
                 animateVerticalTranslationToPosition(coverView, newY);
             }
@@ -95,7 +103,7 @@ public class QuickMediaPreview extends FrameLayout implements
     private void initializeCameraControls() {
         if (cameraControls != null)
             removeView(cameraControls);
-        cameraControls = inflate(context, R.layout.quick_camera_controls, null);
+        cameraControls = inflate(getContext(), R.layout.quick_camera_controls, null);
         addView(cameraControls);
         ImageButton captureButton = (ImageButton) cameraControls.findViewById(R.id.shutter_button);
         captureButton.setOnClickListener(new OnClickListener() {
@@ -164,7 +172,17 @@ public class QuickMediaPreview extends FrameLayout implements
                     if (newY >= 0)
                         quickCamera.setY(newY);
                 }
+            } else {
+                if (!(coverView.getLayoutParams() instanceof MarginLayoutParams))
+                    return false;
+                MarginLayoutParams marginLayoutParams = (MarginLayoutParams) coverView.getLayoutParams();
+                marginLayoutParams.bottomMargin = (int) (marginLayoutParams.bottomMargin + distanceY);
+                if (!(quickCamera.getLayoutParams() instanceof MarginLayoutParams))
+                    return false;
+                MarginLayoutParams cameraMarginLayoutParams = (MarginLayoutParams) quickCamera.getLayoutParams();
+                cameraMarginLayoutParams.bottomMargin = (int) (cameraMarginLayoutParams.bottomMargin + distanceY);
             }
+            coverView.requestLayout();
             return true;
         }
         return false;
@@ -198,42 +216,21 @@ public class QuickMediaPreview extends FrameLayout implements
     }
 
     public void show() {
+        shown = true;
         start();
-        setVisibility(View.VISIBLE);
         setFullscreenCapture(forceFullscreen);
-        InputMethodManager imm = (InputMethodManager) context.getSystemService(Context.INPUT_METHOD_SERVICE);
+        InputMethodManager imm = (InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
         imm.hideSoftInputFromWindow(getWindowToken(), 0);
     }
 
     public void hide() {
-        if (coverView != null) {
-            ObjectAnimator slidedownAnimator = ObjectAnimator.ofFloat(coverView, "translationY", baseY);
-            slidedownAnimator.setDuration(200);
-            slidedownAnimator.addListener(new Animator.AnimatorListener() {
-                @Override
-                public void onAnimationStart(Animator animation) {
-                }
-
-                @Override
-                public void onAnimationEnd(Animator animation) {
-                    setVisibility(View.INVISIBLE);
-                    stop();
-                }
-
-                @Override
-                public void onAnimationCancel(Animator animation) {
-                }
-
-                @Override
-                public void onAnimationRepeat(Animator animation) {
-                }
-            });
-            slidedownAnimator.start();
-        }
+        shown = false;
+        animateVerticalTranslationToPosition(coverView, 0f);
+        coverView.requestLayout();
     }
 
     public boolean isShown() {
-        return getVisibility() == View.VISIBLE;
+        return shown;
     }
 
     public boolean isFullscreen() {
@@ -241,30 +238,47 @@ public class QuickMediaPreview extends FrameLayout implements
     }
 
     public void start() {
-        removeAllViews();
-        quickCamera = new QuickCamera(context, this);
+        //removeAllViews();
+        removeView(quickCamera);
+        removeView(coverView);
+        quickCamera = new QuickCamera(getContext(), this);
         addView(quickCamera);
         initializeCameraControls();
-        setVisibility(View.VISIBLE);
-        newOffset = (getHeight() - getResources().getDimensionPixelOffset(R.dimen.media_preview_height)) / 2;
+        addView(coverView);
+        int newOffset = (getHeight() - getResources().getDimensionPixelOffset(R.dimen.media_preview_height)) / 2;
         animateVerticalTranslationToPosition(quickCamera, newOffset);
         quickCamera.startPreview();
     }
 
     @Override
     public void displayCameraInUseCopy(boolean inUse) {
-        if (cameraControls !=  null) {
-            View errorCopy = cameraControls.findViewById(R.id.camera_unavailable_label);
-            if (errorCopy != null) errorCopy.setVisibility(inUse ? View.VISIBLE : View.GONE);
-        }
+        hide();
+        removeView(coverView);
+        addView(coverView);
+        Toast.makeText(getContext(), R.string.quick_media_preview_camera_in_use, Toast.LENGTH_SHORT).show();
     }
 
-    private static void animateVerticalTranslationToPosition(View view, float position) {
+    private static void animateVerticalTranslationToPosition(final View view, float position) {
         if (view != null) {
-            float offset = position - view.getTop();
+            final float offset = position - view.getTop();
             ObjectAnimator slideAnimator = ObjectAnimator.ofFloat(view, "translationY", offset);
             slideAnimator.setDuration(ANIMATION_LENGTH);
+            /*if (android.os.Build.VERSION.SDK_INT < Build.VERSION_CODES.HONEYCOMB) {
+                slideAnimator.addListener(new AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationEnd(Animator animation) {
+                        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) view.getLayoutParams();
+                        if (offset > 0)
+                            params.bottomMargin = (int) offset;
+                        else
+                            params.bottomMargin = 0;
+                        view.setLayoutParams(params);
+                        view.requestLayout();
+                    }
+                });
+            }*/
             slideAnimator.start();
         }
+
     }
 }

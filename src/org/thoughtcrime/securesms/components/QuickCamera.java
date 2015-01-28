@@ -24,7 +24,6 @@ public class QuickCamera extends SurfaceView implements SurfaceHolder.Callback {
     public static final int MEDIA_TYPE_VIDEO = 2;
     private SurfaceHolder surfaceHolder;
     private Camera camera;
-    private Context context;
     private boolean running;
     private final String TAG = "QuickCamera";
     private int cameraId = Camera.CameraInfo.CAMERA_FACING_BACK;
@@ -32,7 +31,6 @@ public class QuickCamera extends SurfaceView implements SurfaceHolder.Callback {
 
     public QuickCamera(Context context, Callback callback) {
         super(context);
-        this.context = context;
         this.callback = callback;
         DisplayMetrics displayMetrics = getResources().getDisplayMetrics();
         int width = displayMetrics.widthPixels;
@@ -43,22 +41,10 @@ public class QuickCamera extends SurfaceView implements SurfaceHolder.Callback {
         surfaceHolder.addCallback(this);
         surfaceHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
         running = false;
-        camera = getCameraInstance(cameraId);
     }
 
-    private Camera getCameraInstance(int cameraId) {
-        Camera c = null;
-        try {
-            c = Camera.open(cameraId);
-        }
-        catch (RuntimeException e){
-            if (callback != null) {
-                callback.displayCameraInUseCopy(true);
-            }
-        }
-        if (c != null)
-            if (callback != null) callback.displayCameraInUseCopy(false);
-        return c;
+    private Camera getCameraInstance(int cameraId) throws RuntimeException{
+        return Camera.open(cameraId);
     }
 
     private Camera.Size getOptimalPreviewSize(List<Camera.Size> sizes, int width, int height) {
@@ -95,46 +81,17 @@ public class QuickCamera extends SurfaceView implements SurfaceHolder.Callback {
 
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
-        if (camera == null)
-            camera = getCameraInstance(cameraId);
-        if (camera != null) {
-            try {
-                camera.setPreviewDisplay(holder);
-                if (running)
-                    camera.startPreview();
-            } catch (IOException e) {
-                if (callback != null) callback.displayCameraInUseCopy(true);
-            }
-        }
+        startPreview();
     }
 
     @Override
     public void surfaceChanged(SurfaceHolder holder, int format, int w, int h) {
-        if (surfaceHolder.getSurface() == null){
-            return;
-        }
-        try {
-            camera.stopPreview();
-        } catch (Exception e){
-        }
         startPreview();
     }
 
     @Override
     public void surfaceDestroyed(SurfaceHolder holder) {
-        //TODO: clean up everything
-        if (camera != null) {
-            camera.stopPreview();
-            camera.release();
-            camera = null;
-        }
-    }
-
-    public void startPreview() {
-        running = true;
-        if (camera == null) camera = getCameraInstance(cameraId);
-        setupPreview();
-        camera.startPreview();
+        stopPreview();
     }
 
     public void stopPreview() {
@@ -171,16 +128,22 @@ public class QuickCamera extends SurfaceView implements SurfaceHolder.Callback {
         }
     }
 
-    public void setupPreview() {
+    public void startPreview() {
+        stopPreview();
         try {
-            camera.setPreviewDisplay(surfaceHolder);
+            if (camera == null) camera = getCameraInstance(cameraId);
             int rotation = (getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT ? 90 : 0);
             camera.setDisplayOrientation(rotation);
+            camera.setPreviewDisplay(surfaceHolder);
             Camera.Parameters parameters = camera.getParameters();
             Camera.Size previewSize = getOptimalPreviewSize(parameters.getSupportedPreviewSizes(), getWidth(), getHeight());
             parameters.setPreviewSize(previewSize.width, previewSize.height);
             camera.setParameters(parameters);
-        } catch (Exception e) {
+            camera.startPreview();
+            running = true;
+        } catch (RuntimeException e) {
+            if (callback != null) callback.displayCameraInUseCopy(true);
+        } catch (IOException ie) {
             if (callback != null) callback.displayCameraInUseCopy(true);
         }
     }
@@ -223,7 +186,6 @@ public class QuickCamera extends SurfaceView implements SurfaceHolder.Callback {
     public void swapCamera() {
         if (isMultipleCameras()) {
             cameraId = (cameraId == Camera.CameraInfo.CAMERA_FACING_BACK) ? Camera.CameraInfo.CAMERA_FACING_FRONT : Camera.CameraInfo.CAMERA_FACING_BACK;
-            stopPreview();
             startPreview();
         }
     }

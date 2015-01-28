@@ -1,14 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="fill_parent"
-    android:layout_height="fill_parent">
-    <org.thoughtcrime.securesms.components.QuickMediaPreview
-        android:id="@+id/quick_media_drawer"
-        android:layout_height="match_parent"
-        android:layout_width="match_parent"
-        android:gravity="bottom"
-        android:visibility="invisible"/>
+<org.thoughtcrime.securesms.components.QuickMediaPreview
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/quick_media_drawer"
+    android:layout_height="match_parent"
+    android:layout_width="match_parent"
+    android:gravity="bottom">
     <LinearLayout
+        android:id="@+id/content"
         android:layout_width="fill_parent"
         android:layout_height="fill_parent"
         android:orientation="vertical">
@@ -53,7 +51,7 @@
                                 android:layout_width="0dp"
                                 android:layout_height="150dip"
                                 android:layout_weight="1"
-                                android:contentDescription="Attachment Thumbnail"/>
+                                android:contentDescription="Attachment Thumbnail" />
 
                         <LinearLayout
                                 android:orientation="vertical"
@@ -147,4 +145,4 @@
                 android:layout_width="fill_parent"
                 android:layout_height="wrap_content"/>
     </LinearLayout>
-</FrameLayout>
+</org.thoughtcrime.securesms.components.QuickMediaPreview>

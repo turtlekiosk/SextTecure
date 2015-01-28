@@ -169,7 +169,6 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
   private boolean    isEncryptedConversation;
   private boolean    isMmsEnabled = true;
   private boolean    isCharactersLeftViewEnabled;
-  private float      baseY;
 
   private DynamicTheme        dynamicTheme        = new DynamicTheme();
   private DynamicLanguage     dynamicLanguage     = new DynamicLanguage();
@@ -782,10 +781,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     emojiDrawer.setComposeEditText(composeText);
     emojiToggle.setOnClickListener(new EmojiToggleListener());
     quickMediaPreview.setCallback(this);
-    quickMediaPreview.setCoverView(layoutContainer);
     cameraButton.setOnClickListener(new QuickMediaOnClickListener());
-
-    baseY = layoutContainer.getHeight() - quickMediaPreview.getHeight();
   }
 
   private void initializeResources() {
@@ -1197,12 +1193,12 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     public void onClick(View v) {
       InputMethodManager input = (InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
 
+      quickMediaPreview.hide();
       if (emojiDrawer.isOpen()) {
         input.showSoftInput(composeText, 0);
         emojiDrawer.hide();
       } else {
         input.hideSoftInputFromWindow(composeText.getWindowToken(), 0);
-
         emojiDrawer.show();
       }
     }
@@ -1211,6 +1207,8 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
   private class QuickMediaOnClickListener implements OnClickListener {
     @Override
     public void onClick(View v) {
+      if (emojiDrawer.isOpen())
+        emojiToggle.performClick();
       if (quickMediaPreview.isShown()) {
           quickMediaPreview.hide();
       } else {
@@ -1264,9 +1262,10 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
 
     @Override
     public void onClick(View v) {
-      if (emojiDrawer.isOpen()) {
+      if (emojiDrawer.isOpen())
         emojiToggle.performClick();
-      }
+      if (quickMediaPreview.isShown())
+        quickMediaPreview.hide();
     }
 
     @Override
