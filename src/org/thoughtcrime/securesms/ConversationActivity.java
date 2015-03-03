@@ -837,7 +837,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
   private void initializeQuickMedia() {
       if (quickMediaPreview != null) {
           quickMediaPreview.setForceFullscreen(getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE);
-          if (quickMediaPreview.isShown()) quickMediaPreview.start();
+          if (quickMediaPreview.isShown()) quickMediaPreview.show();
       }
   }
 

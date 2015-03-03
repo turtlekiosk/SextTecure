@@ -7,9 +7,11 @@ import android.net.Uri;
 import android.os.Environment;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.view.Gravity;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -28,6 +30,7 @@ public class QuickCamera extends SurfaceView implements SurfaceHolder.Callback {
     private final String TAG = "QuickCamera";
     private int cameraId = Camera.CameraInfo.CAMERA_FACING_BACK;
     private Callback callback;
+    private Camera.Parameters cameraParameters;
 
     public QuickCamera(Context context, Callback callback) {
         super(context);
@@ -35,12 +38,32 @@ public class QuickCamera extends SurfaceView implements SurfaceHolder.Callback {
         DisplayMetrics displayMetrics = getResources().getDisplayMetrics();
         int width = displayMetrics.widthPixels;
         int height = displayMetrics.heightPixels;
-        ViewGroup.LayoutParams layoutParams = new ViewGroup.LayoutParams(width, height);
-        setLayoutParams(layoutParams);
-        surfaceHolder = getHolder();
-        surfaceHolder.addCallback(this);
-        surfaceHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
-        running = false;
+        try {
+            camera = getCameraInstance(cameraId);
+            FrameLayout.LayoutParams layoutParams;
+            if (camera != null) {
+                cameraParameters = camera.getParameters();
+                Camera.Size previewSize;
+                if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT) {
+                    previewSize = getOptimalPreviewSize(cameraParameters.getSupportedPreviewSizes(), height, width);
+                    layoutParams = new FrameLayout.LayoutParams(previewSize.height, previewSize.width);
+                } else {
+                    previewSize = getOptimalPreviewSize(cameraParameters.getSupportedPreviewSizes(), width, height);
+                    layoutParams = new FrameLayout.LayoutParams(previewSize.width, previewSize.height);
+                }
+                cameraParameters.setPreviewSize(previewSize.width, previewSize.height);
+            } else {
+                layoutParams = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+            }
+            layoutParams.gravity = Gravity.CENTER;
+            setLayoutParams(layoutParams);
+            surfaceHolder = getHolder();
+            surfaceHolder.addCallback(this);
+            surfaceHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
+            running = false;
+        } catch (RuntimeException e) {
+
+        }
     }
 
     private Camera getCameraInstance(int cameraId) throws RuntimeException{
@@ -133,12 +156,9 @@ public class QuickCamera extends SurfaceView implements SurfaceHolder.Callback {
         try {
             if (camera == null) camera = getCameraInstance(cameraId);
             int rotation = (getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT ? 90 : 0);
+            camera.setParameters(cameraParameters);
             camera.setDisplayOrientation(rotation);
             camera.setPreviewDisplay(surfaceHolder);
-            Camera.Parameters parameters = camera.getParameters();
-            Camera.Size previewSize = getOptimalPreviewSize(parameters.getSupportedPreviewSizes(), getWidth(), getHeight());
-            parameters.setPreviewSize(previewSize.width, previewSize.height);
-            camera.setParameters(parameters);
             camera.startPreview();
             running = true;
         } catch (RuntimeException e) {
