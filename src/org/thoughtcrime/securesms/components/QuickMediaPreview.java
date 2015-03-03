@@ -43,9 +43,9 @@ public class QuickMediaPreview extends FrameLayout implements
 
     public QuickMediaPreview(final Context context, AttributeSet attrs) {
         super(context, attrs);
-        /*this.setClipChildren(false);
+        this.setClipChildren(false);
         this.setClipToPadding(false);
-        this.setChildrenDrawingOrderEnabled(true);
+        /*this.setChildrenDrawingOrderEnabled(true);
         this.setStaticTransformationsEnabled(true);*/
         mDetector = new GestureDetectorCompat(context, this);
         setOnTouchListener(new View.OnTouchListener() {
@@ -89,14 +89,13 @@ public class QuickMediaPreview extends FrameLayout implements
             if (coverView != null)
                 animateVerticalTranslationToPosition(coverView, baseY - coverView.getHeight());
         } else {
-            int newOffset = (getHeight() - getResources().getDimensionPixelOffset(R.dimen.media_preview_height)) / 2;
+            //int newOffset = getHeight() - getResources().getDimensionPixelOffset(R.dimen.media_preview_height) / 2 - quickCamera.getHeight() / 2;
+            int newOffset = (getHeight() - getResources().getDimensionPixelOffset(R.dimen.media_preview_height)) / 2 + (getHeight() - quickCamera.getHeight());
             animateVerticalTranslationToPosition(quickCamera, newOffset);
+            float newY = forceFullscreen ? baseY : baseY - getResources().getDimension(R.dimen.media_preview_height);
+            animateVerticalTranslationToPosition(coverView, newY);
             if (fullScreenButton != null && !forceFullscreen)
                 fullScreenButton.setImageResource(R.drawable.quick_camera_fullscreen);
-            if (coverView != null) {
-                float newY = forceFullscreen ? baseY : baseY - getResources().getDimension(R.dimen.media_preview_height);
-                animateVerticalTranslationToPosition(coverView, newY);
-            }
         }
     }
 
@@ -225,8 +224,9 @@ public class QuickMediaPreview extends FrameLayout implements
 
     public void hide() {
         shown = false;
+        stop();
         animateVerticalTranslationToPosition(coverView, 0f);
-        coverView.requestLayout();
+        if (callback != null) callback.onSetFullScreen(false);
     }
 
     public boolean isShown() {
@@ -238,7 +238,6 @@ public class QuickMediaPreview extends FrameLayout implements
     }
 
     public void start() {
-        //removeAllViews();
         removeView(quickCamera);
         removeView(coverView);
         quickCamera = new QuickCamera(getContext(), this);
@@ -260,8 +259,8 @@ public class QuickMediaPreview extends FrameLayout implements
 
     private static void animateVerticalTranslationToPosition(final View view, float position) {
         if (view != null) {
-            final float offset = position - view.getTop();
-            ObjectAnimator slideAnimator = ObjectAnimator.ofFloat(view, "translationY", offset);
+            //final float offset = position - view.getTop();
+            ObjectAnimator slideAnimator = ObjectAnimator.ofFloat(view, "y", position);
             slideAnimator.setDuration(ANIMATION_LENGTH);
             /*if (android.os.Build.VERSION.SDK_INT < Build.VERSION_CODES.HONEYCOMB) {
                 slideAnimator.addListener(new AnimatorListenerAdapter() {
