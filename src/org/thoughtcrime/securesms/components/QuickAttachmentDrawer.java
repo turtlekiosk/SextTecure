@@ -18,7 +18,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.ImageButton;
-import android.widget.Toast;
+
+import com.commonsware.cwac.camera.SimpleCameraHost;
 
 import org.thoughtcrime.securesms.R;
 
@@ -66,7 +67,7 @@ public class QuickAttachmentDrawer extends ViewGroup {
     belowICS = android.os.Build.VERSION.SDK_INT < Build.VERSION_CODES.ICE_CREAM_SANDWICH;
     hasCamera = context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_CAMERA) && Camera.getNumberOfCameras() > 0;
     if (hasCamera) {
-      setBackgroundResource(R.color.black);
+      setBackgroundResource(android.R.color.black);
       dragHelper = ViewDragHelper.create(this, 1.f, new ViewDragHelperCallback());
       quickCamera = new QuickCamera(context);
       controls = inflate(getContext(), R.layout.quick_camera_controls, null);
@@ -162,7 +163,8 @@ public class QuickAttachmentDrawer extends ViewGroup {
       }
       final int childRight = childLeft + child.getMeasuredWidth();
 
-      child.layout(childLeft, childTop, childRight, childBottom);
+      if (childHeight > 0)
+        child.layout(childLeft, childTop, childRight, childBottom);
     }
   }
 
@@ -254,12 +256,11 @@ public class QuickAttachmentDrawer extends ViewGroup {
     if (dragHelper != null && dragHelper.continueSettling(true)) {
       ViewCompat.postInvalidateOnAnimation(this);
     } else if (stopCamera) {
-      quickCamera.stopPreviewAndReleaseCamera();
       stopCamera = false;
+      quickCamera.onPause();
     } else if (startCamera) {
       startCamera = false;
-      if (!quickCamera.startPreview())
-        setDrawerStateAndAnimate(COLLAPSED);
+      quickCamera.onResume();
     }
   }
 
@@ -267,6 +268,7 @@ public class QuickAttachmentDrawer extends ViewGroup {
     if (hasCamera) {
       switch (drawerState) {
         case COLLAPSED:
+          quickCamera.previewCreated();
           if (quickCamera.isStarted())
             stopCamera = true;
           slideOffset = COLLAPSED_ANCHOR_POINT;
@@ -490,13 +492,12 @@ public class QuickAttachmentDrawer extends ViewGroup {
     return (float) (topBoundCollapsed - topPosition) / slideRange;
   }
 
-  public void onStop() {
-    if (hasCamera)
-      quickCamera.stopPreviewAndReleaseCamera();
+  public void onPause() {
+    quickCamera.onPause();
   }
 
-  public void onStart() {
+  public void onResume() {
     if (hasCamera && (drawerState == HALF_EXPANDED || drawerState == FULL_EXPANDED))
-      quickCamera.startPreview();
+      quickCamera.onResume();
   }
 }

@@ -217,6 +217,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     super.onResume();
     dynamicTheme.onResume(this);
     dynamicLanguage.onResume(this);
+    quickAttachmentDrawer.onResume();
 
     initializeSecurity();
     initializeTitleBar();
@@ -230,22 +231,11 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
   }
 
   @Override
-  protected void onStart() {
-    super.onStart();
-    quickAttachmentDrawer.onStart();
-  }
-
-  @Override
-  protected void onStop() {
-    quickAttachmentDrawer.onStop();
-    super.onStop();
-  }
-
-  @Override
   protected void onPause() {
     super.onPause();
     MessageNotifier.setVisibleThread(-1L);
     if (isFinishing()) overridePendingTransition(R.anim.fade_scale_in, R.anim.slide_to_right);
+    quickAttachmentDrawer.onPause();
   }
 
   @Override
@@ -1212,11 +1202,6 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     public void onHalfExpanded() {
       getSupportActionBar().hide();
       nextDrawerState = QuickAttachmentDrawer.COLLAPSED;
-    }
-
-    @Override
-    public void displayCameraUnavailableError() {
-      Toast.makeText(ConversationActivity.this, R.string.quick_camera_unavailable, Toast.LENGTH_SHORT).show();
     }
 
     @Override
