@@ -38,7 +38,7 @@ public class QuickCamera extends CameraView {
   @Override
   public void onResume() {
     super.onResume();
-    rotation = getCameraPictureRotation(getActivity().getWindowManager().getDefaultDisplay().getOrientation());
+    rotation = getCameraPictureOrientation();
     started = true;
   }
 

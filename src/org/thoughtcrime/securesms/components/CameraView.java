@@ -414,7 +414,7 @@ public class CameraView extends ViewGroup implements AutoFocusCallback {
     }
   }
 
-  private void setCameraPictureOrientation(Camera.Parameters params) {
+  public int getCameraPictureOrientation() {
     Camera.CameraInfo info=new Camera.CameraInfo();
 
     Camera.getCameraInfo(cameraId, info);
@@ -433,9 +433,9 @@ public class CameraView extends ViewGroup implements AutoFocusCallback {
     }
 
     if (lastPictureOrientation != outputOrientation) {
-      params.setRotation(outputOrientation);
       lastPictureOrientation=outputOrientation;
     }
+    return outputOrientation;
   }
 
   // based on:
