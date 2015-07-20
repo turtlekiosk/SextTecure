@@ -19,6 +19,7 @@ import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
+import android.graphics.Rect;
 import android.hardware.Camera;
 import android.hardware.Camera.PreviewCallback;
 import android.os.Build;
@@ -32,6 +33,7 @@ import android.view.View;
 import android.widget.FrameLayout;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
 
 import com.commonsware.cwac.camera.CameraHost;
@@ -51,12 +53,14 @@ public class CameraView extends FrameLayout {
   private volatile Camera              camera                 = null;
   private          boolean             inPreview              = false;
   private          boolean             cameraReady            = false;
+  protected        boolean             focusEnabled           = false;
   private          CameraHost          host                   = null;
   private          OnOrientationChange onOrientationChange    = null;
   private          int                 displayOrientation     = -1;
   private          int                 outputOrientation      = -1;
   private          int                 cameraId               = -1;
   private          int                 lastPictureOrientation = -1;
+  private          int                 focusAreaSize          = -1;
 
   public CameraView(Context context) {
     this(context, null);
@@ -113,6 +117,9 @@ public class CameraView extends FrameLayout {
           return;
         }
         cameraReady = true;
+        focusEnabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH &&
+            camera.getParameters().getSupportedFocusModes().contains(Camera.Parameters.FOCUS_MODE_AUTO) &&
+            (camera.getParameters().getMaxNumFocusAreas() > 0 || camera.getParameters().getMaxNumMeteringAreas() > 0);
         if (getActivity().getRequestedOrientation() != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
           onOrientationChange.enable();
         }
@@ -150,6 +157,7 @@ public class CameraView extends FrameLayout {
         outputOrientation = -1;
         cameraId = -1;
         lastPictureOrientation = -1;
+        focusAreaSize = -1;
         Log.w(TAG, "onPause() completed");
       }
     });
@@ -195,6 +203,9 @@ public class CameraView extends FrameLayout {
           synchronized (this) { notifyAll(); }
           initPreview();
         }
+        // Recommended focus area size from the manufacture is 1/8 of the image
+        // width (i.e. longer edge of the image)
+        focusAreaSize = Math.max(previewSize.width, previewSize.height) / 8;
       }
     }
     super.onMeasure(widthMeasureSpec, heightMeasureSpec);
@@ -439,6 +450,53 @@ public class CameraView extends FrameLayout {
 
   private void submitTask(SerializedAsyncTask job) {
     ApplicationContext.getInstance(getContext()).getJobManager().add(job);
+  }
+
+  @TargetApi(Build.VERSION_CODES.ICE_CREAM_SANDWICH)
+  protected boolean focusOnArea(float x, float y, @Nullable Camera.AutoFocusCallback callback) {
+    if (camera != null && cameraReady) {
+      camera.cancelAutoFocus();
+      float newX = 0, newY = 0;
+      if (previewSize != null && (getDisplayOrientation() == 90 || getDisplayOrientation() == 270)) {
+        newX = x / previewSize.height * 2000 - 1000;
+        newY = y / previewSize.width * 2000 - 1000;
+      } else if (previewSize != null) {
+        newX = x / previewSize.width * 2000 - 1000;
+        newY = y / previewSize.height * 2000 - 1000;
+      }
+      Rect focusRect = calculateTapArea(newX, newY, 1.f);
+      // AE area is bigger because exposure is sensitive and
+      // easy to over- or underexposure if area is too small.
+      Rect meteringRect = calculateTapArea(newX, newY, 1.5f);
+
+      Camera.Parameters parameters = camera.getParameters();
+      if (parameters.getMaxNumFocusAreas() > 0) {
+        parameters.setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO);
+        ArrayList<Camera.Area> focusAreaArrayList = new ArrayList<>();
+        focusAreaArrayList.add(new Camera.Area(focusRect, 1000));
+        parameters.setFocusAreas(focusAreaArrayList);
+      }
+      if (parameters.getMaxNumMeteringAreas() > 0) {
+        ArrayList<Camera.Area> meteringAreaArrayList = new ArrayList<>();
+        meteringAreaArrayList.add(new Camera.Area(meteringRect, 1000));
+        parameters.setMeteringAreas(meteringAreaArrayList);
+      }
+      camera.setParameters(parameters);
+      camera.autoFocus(callback);
+      return true;
+    }
+    return false;
+  }
+
+  private Rect calculateTapArea(float x, float y, float coefficient) {
+    int scaledFocusAreaSize = (int) (coefficient * focusAreaSize);
+    int left = clamp((int) x - scaledFocusAreaSize / 2, -1000, 1000 - scaledFocusAreaSize);
+    int top = clamp((int) y - scaledFocusAreaSize / 2, -1000, 1000 - scaledFocusAreaSize);
+    return new Rect(left, top, left + scaledFocusAreaSize, top + scaledFocusAreaSize);
+  }
+
+  private static int clamp(int x, int min, int max) {
+    return Math.min(Math.max(x, min), max);
   }
 
   private abstract class SerializedAsyncTask<Result> extends Job {

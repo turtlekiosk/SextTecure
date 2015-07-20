@@ -2,20 +2,32 @@ package org.thoughtcrime.securesms.components.camera;
 
 import android.annotation.TargetApi;
 import android.content.Context;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.Rect;
 import android.hardware.Camera;
 import android.hardware.Camera.CameraInfo;
 import android.hardware.Camera.Parameters;
 import android.hardware.Camera.Size;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Build.VERSION_CODES;
 import android.support.annotation.NonNull;
+import android.support.v4.view.GestureDetectorCompat;
 import android.util.AttributeSet;
 import android.util.Log;
+import android.view.GestureDetector;
+import android.view.MotionEvent;
 
 import com.commonsware.cwac.camera.CameraHost.FailureReason;
 import com.commonsware.cwac.camera.SimpleCameraHost;
+import com.nineoldandroids.animation.Animator;
+import com.nineoldandroids.animation.AnimatorInflater;
+import com.nineoldandroids.animation.AnimatorListenerAdapter;
+import com.nineoldandroids.animation.ValueAnimator;
 
+import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.util.BitmapUtil;
 
 import java.io.IOException;
@@ -24,10 +36,15 @@ import java.util.List;
 @SuppressWarnings("deprecation") public class QuickCamera extends CameraView {
   private static final String TAG = QuickCamera.class.getSimpleName();
 
-  private QuickCameraListener listener;
-  private boolean             capturing;
-  private boolean             started;
-  private QuickCameraHost     cameraHost;
+  private QuickCameraListener   listener;
+  private boolean               capturing;
+  private boolean               started;
+  private QuickCameraHost       cameraHost;
+  private GestureDetectorCompat gestureDetector;
+  private boolean               focusAnimationRunning;
+  private float                 focusCircleX, focusCircleY, focusCircleRadius;
+  private Paint                 focusCirclePaint;
+  private ValueAnimator         focusCircleExpandAnimation, focusCircleFadeOutAnimation;
 
   public QuickCamera(Context context) {
     this(context, null);
@@ -41,6 +58,7 @@ import java.util.List;
     super(context, attrs, defStyle);
     cameraHost = new QuickCameraHost(context);
     setHost(cameraHost);
+    if (Build.VERSION.SDK_INT >= VERSION_CODES.ICE_CREAM_SANDWICH) setupFocusAnimation();
   }
 
   @Override
@@ -55,6 +73,52 @@ import java.util.List;
     if (!started) return;
     super.onPause();
     started = false;
+    focusAnimationRunning = false;
+  }
+
+  private void setupFocusAnimation() {
+    TapToFocusListener tapToFocusListener = new TapToFocusListener();
+    gestureDetector = new GestureDetectorCompat(getContext(), tapToFocusListener);
+    gestureDetector.setIsLongpressEnabled(false);
+    focusAnimationRunning = false;
+    focusCircleX = focusCircleY = 0;
+    focusCirclePaint = new Paint();
+    focusCirclePaint.setAntiAlias(true);
+    focusCirclePaint.setColor(Color.WHITE);
+    focusCirclePaint.setStyle(Paint.Style.STROKE);
+    focusCirclePaint.setStrokeWidth(5);
+
+    focusCircleExpandAnimation = (ValueAnimator) AnimatorInflater.loadAnimator(getContext(), R.animator.quick_camera_focus_circle_expand);
+    focusCircleExpandAnimation.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+      @Override
+      public void onAnimationUpdate(ValueAnimator animation) {
+        focusCircleRadius = (Float) animation.getAnimatedValue();
+        invalidate();
+      }
+    });
+    focusCircleExpandAnimation.addListener(new AnimatorListenerAdapter() {
+      @Override
+      public void onAnimationStart(Animator animation) {
+        focusAnimationRunning = true;
+      }
+    });
+
+    focusCircleFadeOutAnimation = (ValueAnimator) AnimatorInflater.loadAnimator(getContext(), R.animator.quick_camera_focus_circle_fade_out);
+    focusCircleFadeOutAnimation.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+      @Override
+      public void onAnimationUpdate(ValueAnimator animation) {
+        focusCirclePaint.setAlpha((int) animation.getAnimatedValue());
+        invalidate();
+      }
+    });
+    focusCircleFadeOutAnimation.addListener(new AnimatorListenerAdapter() {
+      @Override
+      public void onAnimationEnd(Animator animation) {
+        focusCirclePaint.setAlpha(255);
+        focusAnimationRunning = false;
+        invalidate();
+      }
+    });
   }
 
   public boolean isStarted() {
@@ -76,7 +140,7 @@ import java.util.List;
     setOneShotPreviewCallback(new Camera.PreviewCallback() {
       @Override
       public void onPreviewFrame(byte[] data, final Camera camera) {
-        final int  rotation     = getCameraPictureOrientation();
+        final int rotation      = getCameraPictureOrientation();
         final Size previewSize  = cameraParameters.getPreviewSize();
         final Rect croppingRect = getCroppedRect(previewSize, previewRect, rotation);
 
@@ -153,6 +217,50 @@ import java.util.List;
     cameraHost.swapCameraId();
     onPause();
     onResume();
+  }
+
+  @Override
+  public boolean onTouchEvent(MotionEvent event) {
+    return focusEnabled && gestureDetector != null ?
+        this.gestureDetector.onTouchEvent(event) :
+        super.onTouchEvent(event);
+  }
+
+  @Override
+  protected void dispatchDraw(Canvas canvas) {
+    super.dispatchDraw(canvas);
+    if (focusEnabled && focusAnimationRunning)
+      canvas.drawCircle(focusCircleX, focusCircleY, focusCircleRadius, focusCirclePaint);
+  }
+
+  private class TapToFocusListener extends GestureDetector.SimpleOnGestureListener
+    implements Camera.AutoFocusCallback
+  {
+    @Override
+    public boolean onSingleTapUp(MotionEvent e) {
+      focusCircleX = e.getX();
+      focusCircleY = e.getY();
+      if (focusOnArea(focusCircleX, focusCircleY, this)) {
+        if (focusAnimationRunning) {
+          focusCircleExpandAnimation.cancel();
+          focusCircleFadeOutAnimation.cancel();
+        }
+        focusCircleExpandAnimation.start();
+      }
+      return true;
+    }
+
+    @Override
+    public boolean onDown(MotionEvent e) {
+      return true;
+    }
+
+    @Override
+    public void onAutoFocus(boolean success, Camera camera) {
+      if (focusCircleExpandAnimation.isRunning())
+        focusCircleExpandAnimation.cancel();
+      focusCircleFadeOutAnimation.start();
+    }
   }
 
   public interface QuickCameraListener {
