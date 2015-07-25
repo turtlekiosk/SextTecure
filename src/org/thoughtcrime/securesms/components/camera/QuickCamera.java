@@ -99,6 +99,7 @@ import java.util.List;
     focusCircleExpandAnimation.addListener(new AnimatorListenerAdapter() {
       @Override
       public void onAnimationStart(Animator animation) {
+        focusCirclePaint.setAlpha(255);
         focusAnimationRunning = true;
       }
     });
@@ -114,7 +115,6 @@ import java.util.List;
     focusCircleFadeOutAnimation.addListener(new AnimatorListenerAdapter() {
       @Override
       public void onAnimationEnd(Animator animation) {
-        focusCirclePaint.setAlpha(255);
         focusAnimationRunning = false;
         invalidate();
       }
