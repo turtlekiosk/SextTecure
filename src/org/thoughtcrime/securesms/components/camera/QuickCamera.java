@@ -240,11 +240,11 @@ import java.util.List;
     public boolean onSingleTapUp(MotionEvent e) {
       focusCircleX = e.getX();
       focusCircleY = e.getY();
-      if (focusOnArea(focusCircleX, focusCircleY, this)) {
-        focusCircleExpandAnimation.cancel();
-        focusCircleFadeOutAnimation.cancel();
+      focusCircleExpandAnimation.cancel();
+      focusCircleFadeOutAnimation.cancel();
+      focusAnimationRunning = false;
+      if (focusOnArea(focusCircleX, focusCircleY, this))
         focusCircleExpandAnimation.start();
-      }
       return true;
     }
 

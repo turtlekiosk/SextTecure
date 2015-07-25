@@ -454,38 +454,36 @@ public class CameraView extends FrameLayout {
 
   @TargetApi(Build.VERSION_CODES.ICE_CREAM_SANDWICH)
   protected boolean focusOnArea(float x, float y, @Nullable Camera.AutoFocusCallback callback) {
-    if (camera != null && cameraReady) {
-      camera.cancelAutoFocus();
-      float newX = 0, newY = 0;
-      if (previewSize != null && (getDisplayOrientation() == 90 || getDisplayOrientation() == 270)) {
-        newX = x / previewSize.height * 2000 - 1000;
-        newY = y / previewSize.width * 2000 - 1000;
-      } else if (previewSize != null) {
-        newX = x / previewSize.width * 2000 - 1000;
-        newY = y / previewSize.height * 2000 - 1000;
-      }
-      Rect focusRect = calculateTapArea(newX, newY, 1.f);
-      // AE area is bigger because exposure is sensitive and
-      // easy to over- or underexposure if area is too small.
-      Rect meteringRect = calculateTapArea(newX, newY, 1.5f);
-
-      Camera.Parameters parameters = camera.getParameters();
-      if (parameters.getMaxNumFocusAreas() > 0) {
-        parameters.setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO);
-        ArrayList<Camera.Area> focusAreaArrayList = new ArrayList<>();
-        focusAreaArrayList.add(new Camera.Area(focusRect, 1000));
-        parameters.setFocusAreas(focusAreaArrayList);
-      }
-      if (parameters.getMaxNumMeteringAreas() > 0) {
-        ArrayList<Camera.Area> meteringAreaArrayList = new ArrayList<>();
-        meteringAreaArrayList.add(new Camera.Area(meteringRect, 1000));
-        parameters.setMeteringAreas(meteringAreaArrayList);
-      }
-      camera.setParameters(parameters);
-      camera.autoFocus(callback);
-      return true;
+    if (camera == null || !cameraReady) return false;
+    camera.cancelAutoFocus();
+    float newX = 0, newY = 0;
+    if (previewSize != null && (getDisplayOrientation() == 90 || getDisplayOrientation() == 270)) {
+      newX = x / previewSize.height * 2000 - 1000;
+      newY = y / previewSize.width * 2000 - 1000;
+    } else if (previewSize != null) {
+      newX = x / previewSize.width * 2000 - 1000;
+      newY = y / previewSize.height * 2000 - 1000;
     }
-    return false;
+    Rect focusRect = calculateTapArea(newX, newY, 1.f);
+    // AE area is bigger because exposure is sensitive and
+    // easy to over- or underexposure if area is too small.
+    Rect meteringRect = calculateTapArea(newX, newY, 1.5f);
+
+    Camera.Parameters parameters = camera.getParameters();
+    if (parameters.getMaxNumFocusAreas() > 0) {
+      parameters.setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO);
+      ArrayList<Camera.Area> focusAreaArrayList = new ArrayList<>();
+      focusAreaArrayList.add(new Camera.Area(focusRect, 1000));
+      parameters.setFocusAreas(focusAreaArrayList);
+    }
+    if (parameters.getMaxNumMeteringAreas() > 0) {
+      ArrayList<Camera.Area> meteringAreaArrayList = new ArrayList<>();
+      meteringAreaArrayList.add(new Camera.Area(meteringRect, 1000));
+      parameters.setMeteringAreas(meteringAreaArrayList);
+    }
+    camera.setParameters(parameters);
+    camera.autoFocus(callback);
+    return true;
   }
 
   private Rect calculateTapArea(float x, float y, float coefficient) {
