@@ -241,10 +241,8 @@ import java.util.List;
       focusCircleX = e.getX();
       focusCircleY = e.getY();
       if (focusOnArea(focusCircleX, focusCircleY, this)) {
-        if (focusAnimationRunning) {
-          focusCircleExpandAnimation.cancel();
-          focusCircleFadeOutAnimation.cancel();
-        }
+        focusCircleExpandAnimation.cancel();
+        focusCircleFadeOutAnimation.cancel();
         focusCircleExpandAnimation.start();
       }
       return true;
@@ -257,8 +255,7 @@ import java.util.List;
 
     @Override
     public void onAutoFocus(boolean success, Camera camera) {
-      if (focusCircleExpandAnimation.isRunning())
-        focusCircleExpandAnimation.cancel();
+      focusCircleExpandAnimation.cancel();
       focusCircleFadeOutAnimation.start();
     }
   }
