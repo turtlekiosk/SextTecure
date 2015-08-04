@@ -41,7 +41,7 @@ import java.util.List;
   private boolean               started;
   private QuickCameraHost       cameraHost;
   private GestureDetectorCompat gestureDetector;
-  private boolean               focusAnimationRunning;
+  private boolean               focusAnimationRunning, focusComplete;
   private float                 focusCircleX, focusCircleY, focusCircleRadius;
   private Paint                 focusCirclePaint;
   private ValueAnimator         focusCircleExpandAnimation, focusCircleFadeOutAnimation;
@@ -74,6 +74,7 @@ import java.util.List;
     super.onPause();
     started = false;
     focusAnimationRunning = false;
+    focusComplete = false;
   }
 
   private void setupFocusAnimation() {
@@ -81,6 +82,7 @@ import java.util.List;
     gestureDetector = new GestureDetectorCompat(getContext(), tapToFocusListener);
     gestureDetector.setIsLongpressEnabled(false);
     focusAnimationRunning = false;
+    focusComplete = false;
     focusCircleX = focusCircleY = 0;
     focusCirclePaint = new Paint();
     focusCirclePaint.setAntiAlias(true);
@@ -101,6 +103,12 @@ import java.util.List;
       public void onAnimationStart(Animator animation) {
         focusCirclePaint.setAlpha(255);
         focusAnimationRunning = true;
+      }
+
+      @Override
+      public void onAnimationEnd(Animator animation) {
+        if (focusComplete)
+          focusCircleFadeOutAnimation.start();
       }
     });
 
@@ -243,6 +251,7 @@ import java.util.List;
       focusCircleExpandAnimation.cancel();
       focusCircleFadeOutAnimation.cancel();
       focusAnimationRunning = false;
+      focusComplete = false;
       if (focusOnArea(focusCircleX, focusCircleY, this))
         focusCircleExpandAnimation.start();
       return true;
@@ -255,8 +264,9 @@ import java.util.List;
 
     @Override
     public void onAutoFocus(boolean success, Camera camera) {
-      focusCircleExpandAnimation.cancel();
-      focusCircleFadeOutAnimation.start();
+      focusComplete = true;
+      if (!focusCircleExpandAnimation.isRunning())
+        focusCircleFadeOutAnimation.start();
     }
   }
 
